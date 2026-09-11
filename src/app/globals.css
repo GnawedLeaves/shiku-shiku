@@ -1,4 +1,32 @@
 @import "tailwindcss";
+@plugin "daisyui" {
+  themes: false;
+}
+@plugin "daisyui/theme" {
+  name: "shikushiku";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+  --color-base-100: oklch(99% 0.01 320);
+  --color-base-200: oklch(96% 0.02 320);
+  --color-base-300: oklch(92% 0.03 320);
+  --color-base-content: oklch(25% 0.03 320);
+  --color-primary: oklch(58% 0.19 320);
+  --color-primary-content: oklch(98% 0.01 320);
+  --color-secondary: oklch(75% 0.15 350);
+  --color-secondary-content: oklch(20% 0.03 350);
+  --color-accent: oklch(80% 0.15 180);
+  --color-accent-content: oklch(20% 0.03 180);
+  --color-neutral: oklch(30% 0.02 320);
+  --color-neutral-content: oklch(96% 0.01 320);
+  --color-info: oklch(75% 0.12 220);
+  --color-success: oklch(76% 0.16 150);
+  --color-warning: oklch(82% 0.16 85);
+  --color-error: oklch(65% 0.22 25);
+  --radius-box: 1rem;
+  --radius-field: 0.75rem;
+  --radius-selector: 1rem;
+}
 
 :root {
   --background: #ffffff;
@@ -12,15 +40,6 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }

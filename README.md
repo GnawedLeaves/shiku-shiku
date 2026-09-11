@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Shiku Shiku (しく しく)
 
-## Getting Started
+Swipeable flashcards for learning Japanese vocab. Next.js (App Router) + TypeScript, Supabase
+(auth/database), DaisyUI, deployed on Vercel. Installable as a PWA.
 
-First, run the development server:
+## 1. Create the Supabase project
+
+1. Go to [supabase.com](https://supabase.com), create a free project.
+2. In the SQL editor, run the contents of `supabase/migrations/0001_init.sql`. This creates all
+   tables, row-level security policies, and the two helper functions used for sharing sets and
+   copying cards between sets.
+3. (Optional, for "Continue with Google") In **Authentication → Providers → Google**, enable the
+   provider and fill in your Google OAuth client ID/secret. Add
+   `http://localhost:3000/auth/callback` and `https://<your-vercel-domain>/auth/callback` as
+   authorized redirect URIs in the Google Cloud console.
+4. In **Project Settings → API**, copy the Project URL and anon public key.
+
+## 2. Configure environment variables
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.local.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Fill in `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` from step 1. Leave
+`NEXT_PUBLIC_SITE_URL` as `http://localhost:3000` for local dev.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 3. Run locally
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install
+npm run dev
+```
 
-## Learn More
+Open [http://localhost:3000](http://localhost:3000). Sign up, create a set, add some cards, and
+start a study session.
 
-To learn more about Next.js, take a look at the following resources:
+> Note: `npm run dev` / `npm run build` pass `--webpack` explicitly. The PWA plugin
+> (`@ducanh2912/next-pwa`) hooks into the webpack build to generate the service worker, and
+> Next.js 16 defaults to Turbopack otherwise.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## What's implemented
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- Email/password + Google sign-in (Supabase Auth), progress kept per user.
+- Sets, groups within a set, and manual card entry (question + hiragana/romaji/kanji answers).
+- PDF/image import screen — upload UI and an editable review table are wired up, but the actual
+  word-extraction step is stubbed (`src/lib/study/parseSheet.ts`) until a sample sheet is
+  available to build a real parser against.
+- Swipeable study sessions (drag or buttons), pause/resume, up to 5 sessions in progress at once,
+  scoped to a whole set, specific group(s) (shown together as a batch), or a random sample
+  (10/20/50/custom).
+- Set sharing via a code/link that imports a copy into another account's library, and copying
+  selected cards from one of your sets into another.
+- Romaji / hiragana / both answer display setting.
+- Installable PWA (manifest + service worker; disabled in dev).
 
-## Deploy on Vercel
+`session_results` and `card_progress` tables are already in the schema to support a future
+scoreboard (feature 9 from the brief), but there's no UI for it yet.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deploying
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Push this repo to GitHub and import it in [Vercel](https://vercel.com/new). Set the same three
+environment variables from `.env.local` in the Vercel project settings (use your production
+`NEXT_PUBLIC_SITE_URL`), and add the production `/auth/callback` redirect URL in both Supabase and
+Google Cloud if using Google sign-in.
