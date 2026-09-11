@@ -62,3 +62,14 @@ Push this repo to GitHub and import it in [Vercel](https://vercel.com/new). Set 
 environment variables from `.env.local` in the Vercel project settings (use your production
 `NEXT_PUBLIC_SITE_URL`), and add the production `/auth/callback` redirect URL in both Supabase and
 Google Cloud if using Google sign-in.
+
+## Upcoming features
+
+1. auto suggest translation in jap when keying in the english
+2. upload and scan and parse words from PDF
+3. scoreboard for shared sets / invite to room for flashcards battle
+4. study session history list : show a list of the score and answers that were right and wrong
+5. profile picture and add friend feature
+6. loading indicators for when page is loading
+7. adding cards to group feature not clear and not complete. cannot add cards to group, maybe checkbox then can press add to group then show a list of groups to add to. its basically tagging
+8.
