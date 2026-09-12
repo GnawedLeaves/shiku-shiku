@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useOptimistic, useRef, useState, startTransition } from "react";
 import Link from "next/link";
 import { motion, type PanInfo } from "framer-motion";
 import { recordSwipe, pauseSession } from "@/lib/actions/sessions";
@@ -17,6 +17,32 @@ interface CardData {
 }
 
 type Result = "correct" | "incorrect";
+
+interface SessionState {
+  queue: QueueEntry[];
+  currentIndex: number;
+}
+
+/** Applies a grade locally, exactly as `record_swipe` does on the server. */
+function applyGrade(state: SessionState, cardId: string, result: Result): SessionState {
+  const queue = state.queue.map((entry, index) => {
+    if (index !== state.currentIndex) return entry;
+    if (entry.type === "card") {
+      return entry.cardId === cardId ? { ...entry, status: result } : entry;
+    }
+    if (!(cardId in entry.statuses)) return entry;
+    return { ...entry, statuses: { ...entry.statuses, [cardId]: result } };
+  });
+
+  const entry = queue[state.currentIndex];
+  const resolved =
+    !entry ||
+    (entry.type === "card"
+      ? entry.status !== "pending"
+      : Object.values(entry.statuses).every((status) => status !== "pending"));
+
+  return { queue, currentIndex: resolved ? state.currentIndex + 1 : state.currentIndex };
+}
 
 export default function SwipeSession({
   sessionId,
@@ -35,38 +61,51 @@ export default function SwipeSession({
   answerMode: AnswerDisplayMode;
   initialScore: { correct: number; total: number } | null;
 }) {
-  const [queue, setQueue] = useState(initialQueue);
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [revealed, setRevealed] = useState<Set<string>>(new Set());
-  const [isComplete, setIsComplete] = useState(initialIndex >= initialQueue.length);
-  const [score, setScore] = useState(initialScore);
-  const [isBusy, setIsBusy] = useState(false);
+  // `state` is what the server has confirmed; `optimistic` is what the user
+  // sees. The next card appears on the same frame as the tap -- the write to
+  // Supabase happens in the background inside the transition.
+  const [state, setState] = useState<SessionState>({
+    queue: initialQueue,
+    currentIndex: initialIndex,
+  });
+  const [optimistic, applyOptimistic] = useOptimistic(
+    state,
+    (current: SessionState, action: { cardId: string; result: Result }) =>
+      applyGrade(current, action.cardId, action.result)
+  );
 
-  const currentEntry = queue[currentIndex];
+  const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+
+  // Grades are queued so rapid taps can't race each other to the server.
+  const pendingWrites = useRef<Promise<unknown>>(Promise.resolve());
+
+  const isComplete = optimistic.currentIndex >= optimistic.queue.length;
+  const currentEntry = optimistic.queue[optimistic.currentIndex];
+  const score = isComplete ? computeScore(optimistic.queue) : initialScore;
 
   function reveal(cardId: string) {
     setRevealed((prev) => new Set(prev).add(cardId));
   }
 
-  async function grade(cardId: string, result: Result) {
-    if (isBusy) return;
-    setIsBusy(true);
-    try {
-      const res = await recordSwipe(sessionId, cardId, result);
-      setQueue(res.queue);
-      setCurrentIndex(res.currentIndex);
+  function grade(cardId: string, result: Result) {
+    startTransition(async () => {
+      applyOptimistic({ cardId, result });
       setRevealed(new Set());
-      if (res.isComplete) {
-        setScore(computeScore(res.queue));
-        setIsComplete(true);
-      }
-    } finally {
-      setIsBusy(false);
-    }
-  }
 
-  async function handlePause() {
-    await pauseSession(sessionId);
+      const write = pendingWrites.current.then(() => recordSwipe(sessionId, cardId, result));
+      pendingWrites.current = write.catch(() => undefined);
+
+      try {
+        const confirmed = await write;
+        startTransition(() => {
+          setState({ queue: confirmed.queue, currentIndex: confirmed.currentIndex });
+        });
+      } catch (e) {
+        // The optimistic grade rolls back on its own when the transition ends.
+        setError(e instanceof Error ? e.message : "Couldn't save that answer");
+      }
+    });
   }
 
   if (isComplete) {
@@ -75,12 +114,18 @@ export default function SwipeSession({
         <h1 className="text-2xl font-bold">Session complete!</h1>
         {score && score.total > 0 && (
           <p className="text-lg">
-            {score.correct} / {score.total} correct ({Math.round((score.correct / score.total) * 100)}%)
+            {score.correct} / {score.total} correct (
+            {Math.round((score.correct / score.total) * 100)}%)
           </p>
         )}
-        <Link href="/study/new" className="btn btn-primary">
-          Back to study
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/history" className="btn btn-outline">
+            See history
+          </Link>
+          <Link href="/study/new" className="btn btn-primary">
+            Back to study
+          </Link>
+        </div>
       </div>
     );
   }
@@ -91,14 +136,22 @@ export default function SwipeSession({
 
   return (
     <div className="flex flex-col gap-4">
+      {error && <div className="alert alert-error text-sm py-2">{error}</div>}
+
       <div className="flex items-center justify-between">
         <p className="text-sm opacity-60">
-          {currentIndex + 1} / {queue.length}
+          {optimistic.currentIndex + 1} / {optimistic.queue.length}
         </p>
-        <button className="btn btn-ghost btn-xs" onClick={handlePause}>
-          Pause &amp; exit
-        </button>
+        <form action={pauseSession.bind(null, sessionId)}>
+          <button className="btn btn-ghost btn-xs">Pause &amp; exit</button>
+        </form>
       </div>
+
+      <progress
+        className="progress progress-primary w-full"
+        value={optimistic.currentIndex}
+        max={optimistic.queue.length}
+      />
 
       {currentEntry.type === "card" ? (
         <SwipeCard
@@ -108,7 +161,6 @@ export default function SwipeSession({
           revealed={revealed.has(currentEntry.cardId)}
           onReveal={() => reveal(currentEntry.cardId)}
           onGrade={(result) => grade(currentEntry.cardId, result)}
-          disabled={isBusy}
         />
       ) : (
         <GroupBatch
@@ -121,7 +173,6 @@ export default function SwipeSession({
           revealed={revealed}
           onReveal={reveal}
           onGrade={grade}
-          disabled={isBusy}
         />
       )}
     </div>
@@ -134,14 +185,12 @@ function SwipeCard({
   revealed,
   onReveal,
   onGrade,
-  disabled,
 }: {
   card: CardData;
   answerMode: AnswerDisplayMode;
   revealed: boolean;
   onReveal: () => void;
   onGrade: (result: Result) => void;
-  disabled: boolean;
 }) {
   const [dragX, setDragX] = useState(0);
 
@@ -195,18 +244,10 @@ function SwipeCard({
       {revealed && (
         <>
           <div className="flex gap-4">
-            <button
-              className="btn btn-error btn-circle"
-              disabled={disabled}
-              onClick={() => onGrade("incorrect")}
-            >
+            <button className="btn btn-error btn-circle" onClick={() => onGrade("incorrect")}>
               ✗
             </button>
-            <button
-              className="btn btn-success btn-circle"
-              disabled={disabled}
-              onClick={() => onGrade("correct")}
-            >
+            <button className="btn btn-success btn-circle" onClick={() => onGrade("correct")}>
               ✓
             </button>
           </div>
@@ -226,7 +267,6 @@ function GroupBatch({
   revealed,
   onReveal,
   onGrade,
-  disabled,
 }: {
   groupName: string;
   cardIds: string[];
@@ -236,7 +276,6 @@ function GroupBatch({
   revealed: Set<string>;
   onReveal: (cardId: string) => void;
   onGrade: (cardId: string, result: Result) => void;
-  disabled: boolean;
 }) {
   const pendingIds = cardIds.filter((id) => statuses[id] === "pending");
 
@@ -257,14 +296,12 @@ function GroupBatch({
                   <div className="flex gap-2 mt-1">
                     <button
                       className="btn btn-error btn-xs"
-                      disabled={disabled}
                       onClick={() => onGrade(cardId, "incorrect")}
                     >
                       Don&apos;t know
                     </button>
                     <button
                       className="btn btn-success btn-xs"
-                      disabled={disabled}
                       onClick={() => onGrade(cardId, "correct")}
                     >
                       Got it
@@ -272,7 +309,10 @@ function GroupBatch({
                   </div>
                 </>
               ) : (
-                <button className="btn btn-outline btn-xs self-start" onClick={() => onReveal(cardId)}>
+                <button
+                  className="btn btn-outline btn-xs self-start"
+                  onClick={() => onReveal(cardId)}
+                >
                   Show answer
                 </button>
               )}

@@ -4,8 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { buildQueue } from "@/lib/study/buildQueue";
-import { computeScore } from "@/lib/study/score";
-import type { QueueEntry, SessionScope } from "@/lib/supabase/database.types";
+import type { RecordSwipeResult, SessionScope } from "@/lib/supabase/database.types";
 
 const MAX_ACTIVE_SESSIONS = 5;
 
@@ -36,13 +35,24 @@ export async function createSession(formData: FormData) {
     );
   }
 
-  let cardsQuery = supabase.from("cards").select("id, group_id").eq("set_id", setId);
-  if (groupIds.length > 0) {
-    cardsQuery = cardsQuery.in("group_id", groupIds);
-  }
-  const { data: cards, error: cardsError } = await cardsQuery;
+  const { data: cardRows, error: cardsError } = await supabase
+    .from("cards")
+    .select("id, card_groups(group_id)")
+    .eq("set_id", setId)
+    .order("created_at");
 
-  if (cardsError || !cards || cards.length === 0) {
+  const allCards = (cardRows ?? []).map((row) => ({
+    id: row.id,
+    groupIds: (row.card_groups ?? []).map((link: { group_id: string }) => link.group_id),
+  }));
+
+  // Selected groups act as a filter: keep cards tagged with any of them.
+  const cards =
+    groupIds.length > 0
+      ? allCards.filter((card) => card.groupIds.some((id) => groupIds.includes(id)))
+      : allCards;
+
+  if (cardsError || cards.length === 0) {
     redirect(`/study/new?error=${encodeURIComponent("No cards found for that selection")}`);
   }
 
@@ -51,7 +61,7 @@ export async function createSession(formData: FormData) {
   const effectiveMode: "all" | "random" = groupIds.length > 0 ? "all" : requestedMode;
   const count: number | "all" = countRaw === "all" ? "all" : Math.max(1, Number(countRaw) || 1);
 
-  const queue = buildQueue(cards, { mode: effectiveMode, count });
+  const queue = buildQueue(cards, { mode: effectiveMode, count, groupOrder: groupIds });
 
   const scope: SessionScope = {
     setId,
@@ -80,83 +90,37 @@ export async function createSession(formData: FormData) {
   redirect(`/study/${session.id}`);
 }
 
+/**
+ * Grades one card. The queue update, card_progress upsert, session write and
+ * (on the last card) the result row all happen inside the `record_swipe`
+ * database function, so a swipe costs one roundtrip instead of five. The page
+ * is deliberately not revalidated here -- the client already holds the new
+ * queue, and re-rendering the session route on every swipe is what made
+ * advancing to the next card feel slow.
+ */
 export async function recordSwipe(
   sessionId: string,
   cardId: string,
   result: "correct" | "incorrect"
-) {
+): Promise<RecordSwipeResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
 
-  const { data: session, error } = await supabase
-    .from("study_sessions")
-    .select("*")
-    .eq("id", sessionId)
-    .single();
-
-  if (error || !session) throw new Error("Session not found");
-
-  const queue = session.queue as QueueEntry[];
-  let currentIndex = session.current_index;
-  const currentEntry = queue[currentIndex];
-  if (!currentEntry) throw new Error("This session is already complete");
-
-  if (currentEntry.type === "card") {
-    if (currentEntry.cardId !== cardId) throw new Error("Card does not match the current queue entry");
-    currentEntry.status = result;
-  } else {
-    if (!(cardId in currentEntry.statuses)) throw new Error("Card does not belong to the current group");
-    currentEntry.statuses[cardId] = result;
-  }
-
-  const { data: progress } = await supabase
-    .from("card_progress")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("card_id", cardId)
-    .maybeSingle();
-
-  await supabase.from("card_progress").upsert({
-    user_id: user.id,
-    card_id: cardId,
-    times_correct: (progress?.times_correct ?? 0) + (result === "correct" ? 1 : 0),
-    times_incorrect: (progress?.times_incorrect ?? 0) + (result === "incorrect" ? 1 : 0),
-    last_reviewed_at: new Date().toISOString(),
+  const { data, error } = await supabase.rpc("record_swipe", {
+    p_session_id: sessionId,
+    p_card_id: cardId,
+    p_result: result,
   });
 
-  const entryResolved =
-    currentEntry.type === "card"
-      ? currentEntry.status !== "pending"
-      : Object.values(currentEntry.statuses).every((s) => s !== "pending");
+  if (error) throw new Error(error.message);
 
-  if (entryResolved) currentIndex += 1;
-
-  const isComplete = currentIndex >= queue.length;
-
-  if (isComplete) {
-    const { correct, total } = computeScore(queue);
-    const scorePercentage = total > 0 ? Math.round((correct / total) * 10000) / 100 : 0;
-
-    await supabase
-      .from("study_sessions")
-      .update({ queue, current_index: currentIndex, status: "completed" })
-      .eq("id", sessionId);
-
-    await supabase.from("session_results").insert({
-      session_id: sessionId,
-      user_id: user.id,
-      set_id: (session.scope as SessionScope).setId,
-      score_percentage: scorePercentage,
-    });
-  } else {
-    await supabase.from("study_sessions").update({ queue, current_index: currentIndex }).eq("id", sessionId);
+  const outcome = data as RecordSwipeResult;
+  if (outcome.isComplete) {
+    // Only the finished state needs fresh server data (history + session list).
+    revalidatePath("/study/new");
+    revalidatePath("/history");
   }
 
-  revalidatePath(`/study/${sessionId}`);
-  return { queue, currentIndex, isComplete };
+  return outcome;
 }
 
 export async function pauseSession(sessionId: string) {

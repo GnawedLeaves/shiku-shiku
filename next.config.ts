@@ -11,7 +11,14 @@ const withPWA = withPWAInit({
 });
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // pdfjs is loaded at runtime by the PDF import route and must not be bundled.
+  serverExternalPackages: ["pdfjs-dist"],
+  images: {
+    remotePatterns: [
+      // Avatars served from Supabase Storage.
+      { protocol: "https", hostname: "*.supabase.co", pathname: "/storage/v1/object/public/**" },
+    ],
+  },
 };
 
 export default withPWA(nextConfig);

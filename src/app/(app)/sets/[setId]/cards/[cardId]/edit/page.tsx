@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { updateCard } from "@/lib/actions/cards";
+import CardFields from "@/components/CardFields";
+import SubmitButton from "@/components/ui/SubmitButton";
 
 export default async function EditCardPage({
   params,
@@ -10,14 +12,13 @@ export default async function EditCardPage({
   const { setId, cardId } = await params;
 
   const supabase = await createClient();
-  const { data: card } = await supabase.from("cards").select("*").eq("id", cardId).single();
-  if (!card) notFound();
+  const [{ data: card }, { data: groups }, { data: links }] = await Promise.all([
+    supabase.from("cards").select("*").eq("id", cardId).single(),
+    supabase.from("groups").select("id, name").eq("set_id", setId).order("created_at"),
+    supabase.from("card_groups").select("group_id").eq("card_id", cardId),
+  ]);
 
-  const { data: groups } = await supabase
-    .from("groups")
-    .select("id, name")
-    .eq("set_id", setId)
-    .order("created_at");
+  if (!card) notFound();
 
   return (
     <div className="flex flex-col gap-4">
@@ -25,50 +26,19 @@ export default async function EditCardPage({
 
       <form action={updateCard.bind(null, setId, cardId)} className="card bg-base-100 shadow-sm">
         <div className="card-body gap-3">
-          <label className="form-control">
-            <span className="label-text mb-1">Question (English)</span>
-            <input name="question" required defaultValue={card.question} className="input input-bordered w-full" />
-          </label>
-          <label className="form-control">
-            <span className="label-text mb-1">Answer - hiragana</span>
-            <input
-              name="answer_hiragana"
-              defaultValue={card.answer_hiragana ?? ""}
-              className="input input-bordered w-full"
-            />
-          </label>
-          <label className="form-control">
-            <span className="label-text mb-1">Answer - romaji</span>
-            <input
-              name="answer_romaji"
-              defaultValue={card.answer_romaji ?? ""}
-              className="input input-bordered w-full"
-            />
-          </label>
-          <label className="form-control">
-            <span className="label-text mb-1">Answer - kanji (optional)</span>
-            <input
-              name="answer_kanji"
-              defaultValue={card.answer_kanji ?? ""}
-              className="input input-bordered w-full"
-            />
-          </label>
-          {groups && groups.length > 0 && (
-            <label className="form-control">
-              <span className="label-text mb-1">Group (optional)</span>
-              <select name="group_id" defaultValue={card.group_id ?? ""} className="select select-bordered w-full">
-                <option value="">No group</option>
-                {groups.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <button type="submit" className="btn btn-primary mt-2">
+          <CardFields
+            groups={groups ?? []}
+            selectedGroupIds={(links ?? []).map((link) => link.group_id)}
+            defaults={{
+              question: card.question,
+              answer_hiragana: card.answer_hiragana ?? "",
+              answer_romaji: card.answer_romaji ?? "",
+              answer_kanji: card.answer_kanji ?? "",
+            }}
+          />
+          <SubmitButton className="btn btn-primary mt-2" pendingText="Saving…">
             Save
-          </button>
+          </SubmitButton>
         </div>
       </form>
     </div>
