@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createCard } from "@/lib/actions/cards";
 import CardFields from "@/components/CardFields";
 import SubmitButton from "@/components/ui/SubmitButton";
+import BackButton from "@/components/ui/BackButton";
 
 export default async function NewCardPage({
   params,
@@ -20,12 +21,13 @@ export default async function NewCardPage({
 
   const { data: groups } = await supabase
     .from("groups")
-    .select("id, name")
+    .select("id, name, color")
     .eq("set_id", setId)
     .order("created_at");
 
   return (
     <div className="flex flex-col gap-4">
+      <BackButton href={`/sets/${setId}`} />
       <h1 className="text-xl font-bold">Add card to {set.name}</h1>
 
       {error && <div className="alert alert-error text-sm py-2">{error}</div>}

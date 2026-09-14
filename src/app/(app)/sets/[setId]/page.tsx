@@ -6,6 +6,8 @@ import { createGroup, renameGroup, deleteGroup } from "@/lib/actions/groups";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import CardsList from "@/components/CardsList";
 import SubmitButton from "@/components/ui/SubmitButton";
+import GroupColorPicker from "@/components/GroupColorPicker";
+import BackButton from "@/components/ui/BackButton";
 
 export default async function SetDetailPage({
   params,
@@ -26,7 +28,7 @@ export default async function SetDetailPage({
   const [{ data: set }, { data: groups }, { data: cards }, { data: profile }, { data: otherSets }] =
     await Promise.all([
       supabase.from("sets").select("*").eq("id", setId).single(),
-      supabase.from("groups").select("id, name").eq("set_id", setId).order("created_at"),
+      supabase.from("groups").select("id, name, color").eq("set_id", setId).order("created_at"),
       supabase
         .from("cards")
         .select("id, question, answer_hiragana, answer_romaji, card_groups(group_id)")
@@ -51,6 +53,8 @@ export default async function SetDetailPage({
 
   return (
     <div className="flex flex-col gap-4">
+      <BackButton href="/dashboard" />
+
       {error && <div className="alert alert-error text-sm py-2">{error}</div>}
 
       <div className="flex items-start justify-between gap-2">
@@ -118,13 +122,17 @@ export default async function SetDetailPage({
           </p>
           {groups?.length === 0 && <p className="text-sm opacity-60">No groups yet.</p>}
           {groups?.map((group) => (
-            <div key={group.id} className="flex items-center gap-2">
-              <form action={renameGroup.bind(null, setId, group.id)} className="flex-1 flex gap-2">
+            <div key={group.id} className="flex flex-wrap items-center gap-2 py-1">
+              <form
+                action={renameGroup.bind(null, setId, group.id)}
+                className="flex flex-1 flex-wrap items-center gap-2 min-w-0"
+              >
                 <input
                   name="name"
                   defaultValue={group.name}
-                  className="input input-bordered input-sm flex-1"
+                  className="input input-bordered input-sm flex-1 min-w-32"
                 />
+                <GroupColorPicker defaultColor={group.color} />
                 <SubmitButton className="btn btn-ghost btn-xs" pendingText="Saving…">
                   Save
                 </SubmitButton>
@@ -139,13 +147,14 @@ export default async function SetDetailPage({
               </form>
             </div>
           ))}
-          <form action={createGroup.bind(null, setId)} className="flex gap-2 mt-2">
+          <form action={createGroup.bind(null, setId)} className="flex flex-wrap items-center gap-2 mt-2">
             <input
               name="name"
               required
               placeholder="New group name"
-              className="input input-bordered input-sm flex-1"
+              className="input input-bordered input-sm flex-1 min-w-32"
             />
+            <GroupColorPicker />
             <SubmitButton className="btn btn-outline btn-sm" pendingText="Adding…">
               Add group
             </SubmitButton>

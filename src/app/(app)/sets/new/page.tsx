@@ -1,4 +1,5 @@
 import { createSet } from "@/lib/actions/sets";
+import BackButton from "@/components/ui/BackButton";
 
 export default async function NewSetPage({
   searchParams,
@@ -9,6 +10,7 @@ export default async function NewSetPage({
 
   return (
     <div className="flex flex-col gap-4">
+      <BackButton href="/dashboard" />
       <h1 className="text-xl font-bold">New set</h1>
 
       {params.error && <div className="alert alert-error text-sm py-2">{params.error}</div>}

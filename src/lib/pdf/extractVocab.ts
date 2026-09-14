@@ -73,6 +73,11 @@ function joinFragments(fragments: string[]): string {
   return clean(out);
 }
 
+/** True for glyph sizes that belong to table body text, not titles or furigana. */
+function isBodyGlyph(item: PdfTextItem, template: PdfTemplate): boolean {
+  return item.height >= template.minGlyphHeight && item.height <= template.maxGlyphHeight;
+}
+
 function columnsFor(template: PdfTemplate, page: PdfPageText): TemplateColumn[] {
   if (template.mode === "fixed") return template.columns;
   return autoDetectColumns(page, template);
@@ -84,7 +89,7 @@ function columnsFor(template: PdfTemplate, page: PdfPageText): TemplateColumn[] 
  * reading, a column of mostly latin letters becomes the English meaning.
  */
 function autoDetectColumns(page: PdfPageText, template: PdfTemplate): TemplateColumn[] {
-  const items = page.items.filter((i) => i.height >= template.minGlyphHeight && clean(i.str));
+  const items = page.items.filter((i) => isBodyGlyph(i, template) && clean(i.str));
   if (items.length === 0) return [];
 
   // Cluster the x positions that repeat down the page. Keying off the
@@ -140,6 +145,46 @@ function autoDetectColumns(page: PdfPageText, template: PdfTemplate): TemplateCo
   });
 }
 
+const LATIN_RE = /[A-Za-z]/;
+const CJK_OR_KANA_GLOBAL_RE = /[぀-ヿ㐀-鿿]/g;
+
+function hasLatinLetters(text: string): boolean {
+  return LATIN_RE.test(text);
+}
+
+/** Removes kana/kanji/hanzi glyphs, leaving Latin text and punctuation. */
+function stripCjk(text: string): string {
+  return clean(text.replace(CJK_OR_KANA_GLOBAL_RE, " "));
+}
+
+/**
+ * Column bands (fixed or auto-detected) are a best guess at where a sheet's
+ * English column sits. When a sheet's layout doesn't quite match the guess --
+ * different page margins, a wider Chinese-meaning column pushing its
+ * neighbour left, English and Chinese swapped left-to-right -- Chinese (or
+ * stray Japanese) text can leak into, or fully occupy, the cell meant to hold
+ * the English meaning. That's what caused flashcards whose question was the
+ * Chinese translation instead of English.
+ *
+ * This runs on every extracted row regardless of which path built it (fixed
+ * template, auto-detect, or Document AI): any CJK/kana glyphs are stripped
+ * out of the English cell, since a genuine English meaning never contains
+ * them. If that empties the cell -- the "English" band captured nothing but
+ * Chinese/Japanese -- and the neighbouring "other" cell (where Chinese
+ * normally lands) has Latin text instead, the two are swapped, recovering the
+ * English that ended up one column over.
+ */
+export function sanitizeEnglishColumn(row: ExtractedRow): ExtractedRow {
+  const strippedEnglish = stripCjk(row.english);
+  if (strippedEnglish) {
+    return strippedEnglish === row.english ? row : { ...row, english: strippedEnglish };
+  }
+  if (hasLatinLetters(row.other)) {
+    return { ...row, english: stripCjk(row.other), other: row.english };
+  }
+  return row.english ? { ...row, english: "" } : row;
+}
+
 function roleAt(columns: TemplateColumn[], xFraction: number): ColumnRole | null {
   for (const col of columns) {
     if (xFraction >= col.from && xFraction < col.to) return col.role;
@@ -147,79 +192,144 @@ function roleAt(columns: TemplateColumn[], xFraction: number): ColumnRole | null
   return null;
 }
 
-/**
- * Splits a page into row bands. When the table numbers its rows (the common
- * case) the numbers anchor the bands, which keeps multi-line cells attached to
- * the row that started them. Otherwise bands come from the baselines.
- */
-function rowBands(
-  page: PdfPageText,
-  columns: TemplateColumn[],
-  template: PdfTemplate
-): { top: number; bottom: number; index: string }[] {
+interface RowAnchor {
+  y: number;
+  index: string;
+}
+
+/** Finds the row numbers in the index column, sorted top to bottom. */
+function findRowAnchors(page: PdfPageText, columns: TemplateColumn[], template: PdfTemplate): RowAnchor[] {
   const indexColumn = columns.find((c) => c.role === "index");
-  const anchors: { y: number; index: string }[] = [];
+  if (!indexColumn) return [];
 
-  if (indexColumn) {
-    for (const item of page.items) {
-      if (item.height < template.minGlyphHeight) continue;
-      const text = clean(item.str);
-      if (!/^\d{1,3}$/.test(text)) continue;
-      const xFraction = item.x / page.width;
-      if (xFraction < indexColumn.from || xFraction >= indexColumn.to) continue;
-      anchors.push({ y: item.y, index: text });
+  const anchors: RowAnchor[] = [];
+  for (const item of page.items) {
+    if (!isBodyGlyph(item, template)) continue;
+    const text = clean(item.str);
+    if (!/^\d{1,3}$/.test(text)) continue;
+    const xFraction = item.x / page.width;
+    if (xFraction < indexColumn.from || xFraction >= indexColumn.to) continue;
+    anchors.push({ y: item.y, index: text });
+  }
+  return anchors.sort((a, b) => b.y - a.y);
+}
+
+/**
+ * Finds which row a y-position belongs to when the table numbers its rows.
+ * A row number is not reliably at the top of its row: table generators like
+ * these commonly vertically *centre* every cell (including the row-number
+ * cell) against the row's tallest cell, so a row number can sit well below
+ * the first line of a tall wrapped cell in its own row (an English
+ * definition running 3-4 lines), or well above a wrapped cell's later lines
+ * (a bracketed usage note on its own second line). A fixed top/bottom cutoff
+ * per row -- whether the midpoint between neighbours, or the next row's own
+ * position -- gets this wrong in one direction or the other whenever
+ * adjacent rows differ much in height, which is exactly what silently
+ * dropped and garbled entries in real lesson sheets.
+ *
+ * Assigning each item to whichever row number is numerically *closest* to it
+ * is robust in both directions: content belonging to an unusually tall row
+ * is, by construction, still closer to that row's own number than to a
+ * normal-height neighbour's, and content from a normal-height row is
+ * trivially closest to its own (adjacent) number.
+ */
+function nearestAnchorIndex(y: number, anchors: RowAnchor[]): number {
+  let best = 0;
+  let bestDistance = Infinity;
+  for (let i = 0; i < anchors.length; i++) {
+    const distance = Math.abs(anchors[i].y - y);
+    if (distance < bestDistance) {
+      best = i;
+      bestDistance = distance;
     }
   }
+  return best;
+}
 
-  if (anchors.length < template.minRowsPerPage) {
-    // No usable numbering: fall back to baseline grouping.
-    const baselines = new Map<number, number>();
-    for (const item of page.items) {
-      if (item.height < template.minGlyphHeight || !clean(item.str)) continue;
-      const key = Math.round(item.y);
-      baselines.set(key, (baselines.get(key) ?? 0) + 1);
-    }
-    const ys = [...baselines.keys()].sort((a, b) => b - a);
-    return ys.map((y, i) => ({
-      top: i === 0 ? y + 6 : (ys[i - 1] + y) / 2,
-      bottom: i === ys.length - 1 ? y - 6 : (y + ys[i + 1]) / 2,
-      index: "",
-    }));
-  }
-
-  anchors.sort((a, b) => b.y - a.y);
-  return anchors.map((anchor, i) => {
-    const prevMid = i === 0 ? null : (anchors[i - 1].y + anchor.y) / 2;
-    const nextMid = i === anchors.length - 1 ? null : (anchor.y + anchors[i + 1].y) / 2;
-    const halfHeight = nextMid !== null ? anchor.y - nextMid : prevMid !== null ? prevMid - anchor.y : 10;
-    return {
-      top: prevMid ?? anchor.y + halfHeight,
-      bottom: nextMid ?? anchor.y - halfHeight,
-      index: anchor.index,
-    };
+function buildRow(page: PdfPageText, cells: Record<ColumnRole, string[]>, index: string): ExtractedRow {
+  return sanitizeEnglishColumn({
+    page: page.pageNumber,
+    index: index || joinFragments(cells.index),
+    reading: joinFragments(cells.reading),
+    kanji: joinFragments(cells.kanji),
+    english: joinFragments(cells.english),
+    other: joinFragments(cells.other),
   });
 }
 
-function extractPage(page: PdfPageText, template: PdfTemplate): ExtractedRow[] {
-  const columns = columnsFor(template, page);
-  if (columns.length === 0) return [];
+function isRowComplete(row: ExtractedRow, template: PdfTemplate): boolean {
+  return template.requireRoles.every((role) => {
+    if (role === "index") return Boolean(row.index);
+    return Boolean(row[role as "reading" | "kanji" | "english" | "other"]);
+  });
+}
 
-  const bands = rowBands(page, columns, template);
-  if (bands.length < template.minRowsPerPage) return [];
+function emptyCells(): Record<ColumnRole, string[]> {
+  return { index: [], reading: [], kanji: [], english: [], other: [] };
+}
+
+// A page-footer page-number ("1/7") sits in its own isolated spot, far below
+// the last table row, but at a normal body-text size and often inside the
+// wide x-range a detected column's band extends into. Nearest-anchor
+// attribution alone would still sweep it into whichever row's anchor happens
+// to be closest -- usually the last one on the page. The real per-item
+// distances seen even in unusually tall wrapped rows top out well under this,
+// so anything farther out is content the table doesn't own at all.
+const MAX_ANCHOR_DISTANCE = 50;
+
+function extractPageByAnchors(
+  page: PdfPageText,
+  columns: TemplateColumn[],
+  anchors: RowAnchor[],
+  template: PdfTemplate
+): ExtractedRow[] {
+  const buckets = anchors.map(() => emptyCells());
+
+  const eligible = page.items
+    .filter((item) => isBodyGlyph(item, template))
+    .sort((a, b) => (Math.abs(a.y - b.y) > 1 ? b.y - a.y : a.x - b.x));
+
+  for (const item of eligible) {
+    const text = clean(item.str);
+    if (!text) continue;
+    const role = roleAt(columns, item.x / page.width);
+    if (!role) continue;
+    const rowIndex = nearestAnchorIndex(item.y, anchors);
+    if (Math.abs(anchors[rowIndex].y - item.y) > MAX_ANCHOR_DISTANCE) continue;
+    buckets[rowIndex][role].push(text);
+  }
 
   const rows: ExtractedRow[] = [];
+  for (let i = 0; i < anchors.length; i++) {
+    const row = buildRow(page, buckets[i], anchors[i].index);
+    if (isRowComplete(row, template)) rows.push(row);
+  }
+  return rows;
+}
 
+/** Used when a page's table has no row numbers to anchor on. */
+function extractPageByBaselines(
+  page: PdfPageText,
+  columns: TemplateColumn[],
+  template: PdfTemplate
+): ExtractedRow[] {
+  const baselines = new Map<number, number>();
+  for (const item of page.items) {
+    if (!isBodyGlyph(item, template) || !clean(item.str)) continue;
+    const key = Math.round(item.y);
+    baselines.set(key, (baselines.get(key) ?? 0) + 1);
+  }
+  const ys = [...baselines.keys()].sort((a, b) => b - a);
+  const bands = ys.map((y, i) => ({
+    top: i === 0 ? y + 6 : (ys[i - 1] + y) / 2,
+    bottom: i === ys.length - 1 ? y - 6 : (y + ys[i + 1]) / 2,
+  }));
+
+  const rows: ExtractedRow[] = [];
   for (const band of bands) {
-    const cells: Record<ColumnRole, string[]> = {
-      index: [],
-      reading: [],
-      kanji: [],
-      english: [],
-      other: [],
-    };
-
+    const cells = emptyCells();
     const inBand = page.items
-      .filter((item) => item.height >= template.minGlyphHeight)
+      .filter((item) => isBodyGlyph(item, template))
       .filter((item) => item.y <= band.top && item.y > band.bottom)
       .sort((a, b) => (Math.abs(a.y - b.y) > 1 ? b.y - a.y : a.x - b.x));
 
@@ -231,23 +341,51 @@ function extractPage(page: PdfPageText, template: PdfTemplate): ExtractedRow[] {
       cells[role].push(text);
     }
 
-    const row: ExtractedRow = {
-      page: page.pageNumber,
-      index: band.index || joinFragments(cells.index),
-      reading: joinFragments(cells.reading),
-      kanji: joinFragments(cells.kanji),
-      english: joinFragments(cells.english),
-      other: joinFragments(cells.other),
-    };
-
-    const complete = template.requireRoles.every((role) => {
-      if (role === "index") return Boolean(row.index);
-      return Boolean(row[role as "reading" | "kanji" | "english" | "other"]);
-    });
-    if (complete) rows.push(row);
+    const row = buildRow(page, cells, "");
+    if (isRowComplete(row, template)) rows.push(row);
   }
-
   return rows;
+}
+
+function extractWithColumns(
+  page: PdfPageText,
+  columns: TemplateColumn[],
+  template: PdfTemplate
+): ExtractedRow[] {
+  const anchors = findRowAnchors(page, columns, template);
+  if (anchors.length >= template.minRowsPerPage) {
+    return extractPageByAnchors(page, columns, anchors, template);
+  }
+  return extractPageByBaselines(page, columns, template);
+}
+
+// A fixed template's column bands are calibrated against one reference
+// sheet. Other lessons from the same course routinely shift those bands by
+// 10pt or more even though the row numbering doesn't move (each lesson's
+// table gets its own auto-sized columns when the source document was
+// generated), which silently drops most rows as incomplete rather than
+// failing loudly -- a handful of plausible-looking cards, not an error. If
+// completing fewer than this fraction of the page's own numbered rows
+// suggests exactly that, the page is re-parsed with auto-detected columns
+// and whichever attempt actually completed more rows wins.
+const FIXED_TEMPLATE_MIN_COMPLETION = 0.6;
+
+function extractPage(page: PdfPageText, template: PdfTemplate): ExtractedRow[] {
+  const columns = columnsFor(template, page);
+  if (columns.length === 0) return [];
+
+  const rows = extractWithColumns(page, columns, template);
+  if (template.mode !== "fixed") return rows;
+
+  const anchors = findRowAnchors(page, columns, template);
+  const expected = Math.max(anchors.length, template.minRowsPerPage);
+  if (rows.length / expected >= FIXED_TEMPLATE_MIN_COMPLETION) return rows;
+
+  const autoColumns = autoDetectColumns(page, template);
+  if (autoColumns.length === 0) return rows;
+
+  const autoRows = extractWithColumns(page, autoColumns, template);
+  return autoRows.length > rows.length ? autoRows : rows;
 }
 
 export function extractVocabRows(

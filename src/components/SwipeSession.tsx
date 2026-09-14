@@ -135,7 +135,12 @@ export default function SwipeSession({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    // `h-full` lets the card below fill the space between the header and the
+    // bottom nav (main is a flex-1 sibling in the app shell, so it already
+    // has a real resolved height, not just its content's height) instead of
+    // sitting at whatever size its content naturally wants, which is what
+    // kept it pinned near the top with room to spare underneath.
+    <div className="flex flex-col gap-3 h-full min-h-140">
       {error && <div className="alert alert-error text-sm py-2">{error}</div>}
 
       <div className="flex items-center justify-between">
@@ -153,28 +158,30 @@ export default function SwipeSession({
         max={optimistic.queue.length}
       />
 
-      {currentEntry.type === "card" ? (
-        <SwipeCard
-          key={currentEntry.cardId}
-          card={cardsById[currentEntry.cardId]}
-          answerMode={answerMode}
-          revealed={revealed.has(currentEntry.cardId)}
-          onReveal={() => reveal(currentEntry.cardId)}
-          onGrade={(result) => grade(currentEntry.cardId, result)}
-        />
-      ) : (
-        <GroupBatch
-          key={currentEntry.groupId}
-          groupName={groupNamesById[currentEntry.groupId] ?? "Group"}
-          cardIds={currentEntry.cardIds}
-          statuses={currentEntry.statuses}
-          cardsById={cardsById}
-          answerMode={answerMode}
-          revealed={revealed}
-          onReveal={reveal}
-          onGrade={grade}
-        />
-      )}
+      <div className="flex-1 min-h-0 flex flex-col">
+        {currentEntry.type === "card" ? (
+          <SwipeCard
+            key={currentEntry.cardId}
+            card={cardsById[currentEntry.cardId]}
+            answerMode={answerMode}
+            revealed={revealed.has(currentEntry.cardId)}
+            onReveal={() => reveal(currentEntry.cardId)}
+            onGrade={(result) => grade(currentEntry.cardId, result)}
+          />
+        ) : (
+          <GroupBatch
+            key={currentEntry.groupId}
+            groupName={groupNamesById[currentEntry.groupId] ?? "Group"}
+            cardIds={currentEntry.cardIds}
+            statuses={currentEntry.statuses}
+            cardsById={cardsById}
+            answerMode={answerMode}
+            revealed={revealed}
+            onReveal={reveal}
+            onGrade={grade}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -202,9 +209,9 @@ function SwipeCard({
   }
 
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-1 min-h-0 flex-col items-center gap-4">
       <motion.div
-        className="card w-full max-w-sm bg-base-100 shadow-xl select-none cursor-grab active:cursor-grabbing"
+        className="card w-full max-w-md flex-1 min-h-0 bg-base-100 shadow-xl select-none cursor-grab active:cursor-grabbing"
         style={{ touchAction: "pan-y" }}
         drag={revealed ? "x" : false}
         dragConstraints={{ left: 0, right: 0 }}
@@ -216,7 +223,7 @@ function SwipeCard({
         whileTap={{ scale: revealed ? 1.02 : 0.98 }}
       >
         <div
-          className="card-body items-center text-center min-h-56 justify-center rounded-box transition-colors"
+          className="card-body h-full items-center text-center justify-center rounded-box transition-colors"
           style={{
             backgroundColor:
               dragX > 30
@@ -227,13 +234,13 @@ function SwipeCard({
           }}
         >
           <p className="text-sm opacity-60 uppercase tracking-wide">Question</p>
-          <h2 className="text-2xl font-bold">{card.question}</h2>
+          <h2 className="text-3xl font-bold px-2">{card.question}</h2>
           {revealed ? (
             <>
-              <div className="divider my-1" />
+              <div className="divider my-2" />
               <p className="text-sm opacity-60 uppercase tracking-wide">Answer</p>
-              <p className="text-xl">{formatAnswer(card, answerMode)}</p>
-              {card.answer_kanji && <p className="text-sm opacity-60">{card.answer_kanji}</p>}
+              <p className="text-2xl">{formatAnswer(card, answerMode)}</p>
+              {card.answer_kanji && <p className="text-base opacity-60 mt-1">{card.answer_kanji}</p>}
             </>
           ) : (
             <p className="text-xs opacity-50 mt-2">Tap to reveal</p>
@@ -243,15 +250,25 @@ function SwipeCard({
 
       {revealed && (
         <>
-          <div className="flex gap-4">
-            <button className="btn btn-error btn-circle" onClick={() => onGrade("incorrect")}>
+          <div className="flex gap-6 shrink-0">
+            <button
+              className="btn btn-error btn-circle btn-lg text-2xl"
+              onClick={() => onGrade("incorrect")}
+              aria-label="Don't know"
+            >
               ✗
             </button>
-            <button className="btn btn-success btn-circle" onClick={() => onGrade("correct")}>
+            <button
+              className="btn btn-success btn-circle btn-lg text-2xl"
+              onClick={() => onGrade("correct")}
+              aria-label="Got it"
+            >
               ✓
             </button>
           </div>
-          <p className="text-xs opacity-50">Swipe right = got it, swipe left = don&apos;t know</p>
+          <p className="text-xs opacity-50 shrink-0">
+            Swipe right = got it, swipe left = don&apos;t know
+          </p>
         </>
       )}
     </div>
@@ -280,7 +297,7 @@ function GroupBatch({
   const pendingIds = cardIds.filter((id) => statuses[id] === "pending");
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto">
       <h2 className="font-semibold">{groupName}</h2>
       <p className="text-xs opacity-60">Review each card in this group, then grade it.</p>
       {pendingIds.map((cardId) => {

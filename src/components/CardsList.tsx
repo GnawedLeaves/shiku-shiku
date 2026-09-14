@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { deleteCard } from "@/lib/actions/cards";
+import { deleteCard, deleteCards } from "@/lib/actions/cards";
 import { copyCardsIntoSet } from "@/lib/actions/sets";
 import {
   addCardsToGroups,
@@ -11,6 +11,8 @@ import {
   removeCardsFromGroup,
 } from "@/lib/actions/groups";
 import { formatAnswer } from "@/lib/study/formatAnswer";
+import { GROUP_COLOR_PRESETS } from "@/lib/study/groupColors";
+import GroupBadge from "@/components/GroupBadge";
 import type { AnswerDisplayMode } from "@/lib/supabase/database.types";
 
 interface CardRow {
@@ -24,6 +26,7 @@ interface CardRow {
 interface GroupRow {
   id: string;
   name: string;
+  color?: string | null;
 }
 
 type Filter = { kind: "all" } | { kind: "ungrouped" } | { kind: "group"; id: string };
@@ -53,6 +56,7 @@ export default function CardsList({
     () => Object.fromEntries(groups.map((group) => [group.id, group.name])),
     [groups]
   );
+  const groupById = useMemo(() => Object.fromEntries(groups.map((g) => [g.id, g])), [groups]);
 
   const visibleCards = useMemo(() => {
     if (filter.kind === "all") return cards;
@@ -115,9 +119,9 @@ export default function CardsList({
     });
   }
 
-  function handleCreateGroup(name: string) {
+  function handleCreateGroup(name: string, color: string | null) {
     run(async () => {
-      await createGroupWithCards(setId, name, selectedIds);
+      await createGroupWithCards(setId, name, selectedIds, color);
       setIsTagOpen(false);
       setSelected(new Set());
     });
@@ -126,6 +130,18 @@ export default function CardsList({
   function handleRemoveFromGroup(groupId: string) {
     run(async () => {
       await removeCardsFromGroup(setId, selectedIds, groupId);
+      setSelected(new Set());
+    });
+  }
+
+  function handleDeleteSelected() {
+    if (selectedIds.length === 0) return;
+    const confirmed = confirm(
+      `Delete ${selectedIds.length} card${selectedIds.length === 1 ? "" : "s"}? This can't be undone.`
+    );
+    if (!confirmed) return;
+    run(async () => {
+      await deleteCards(setId, selectedIds);
       setSelected(new Set());
     });
   }
@@ -163,6 +179,7 @@ export default function CardsList({
               key={group.id}
               active={filter.kind === "group" && filter.id === group.id}
               onClick={() => setFilter({ kind: "group", id: group.id })}
+              color={group.color}
             >
               {group.name} ({count})
             </FilterChip>
@@ -212,9 +229,11 @@ export default function CardsList({
                 {card.groupIds.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1">
                     {card.groupIds.map((groupId) => (
-                      <span key={groupId} className="badge badge-ghost badge-xs">
-                        {groupNames[groupId] ?? "?"}
-                      </span>
+                      <GroupBadge
+                        key={groupId}
+                        name={groupNames[groupId] ?? "?"}
+                        color={groupById[groupId]?.color}
+                      />
                     ))}
                   </div>
                 )}
@@ -260,6 +279,15 @@ export default function CardsList({
                   Remove from {groupNames[filter.id]}
                 </button>
               )}
+              <button
+                type="button"
+                className="btn btn-outline btn-sm text-error border-error/40 hover:bg-error hover:text-error-content"
+                disabled={isPending}
+                onClick={handleDeleteSelected}
+              >
+                {isPending && <span className="loading loading-spinner loading-xs" />}
+                Delete
+              </button>
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
@@ -313,18 +341,27 @@ export default function CardsList({
 function FilterChip({
   active,
   onClick,
+  color,
   children,
 }: {
   active: boolean;
   onClick: () => void;
+  color?: string | null;
   children: React.ReactNode;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`btn btn-xs ${active ? "btn-primary" : "btn-ghost"}`}
+      className={`btn btn-xs gap-1.5 ${active ? "btn-primary" : "btn-ghost"}`}
     >
+      {color && (
+        <span
+          className="h-2 w-2 rounded-full shrink-0"
+          style={{ backgroundColor: color }}
+          aria-hidden="true"
+        />
+      )}
       {children}
     </button>
   );
@@ -341,10 +378,11 @@ function TagDialog({
   isPending: boolean;
   onClose: () => void;
   onApply: (groupIds: string[]) => void;
-  onCreate: (name: string) => void;
+  onCreate: (name: string, color: string | null) => void;
 }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupColor, setNewGroupColor] = useState<string | null>(null);
 
   return (
     <div className="modal modal-open" role="dialog">
@@ -371,6 +409,13 @@ function TagDialog({
                   })
                 }
               />
+              {group.color && (
+                <span
+                  className="h-2.5 w-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: group.color }}
+                  aria-hidden="true"
+                />
+              )}
               <span className="label-text">{group.name}</span>
             </label>
           ))}
@@ -378,21 +423,38 @@ function TagDialog({
 
         <div className="divider my-2">or create a new one</div>
 
-        <div className="flex gap-2">
-          <input
-            value={newGroupName}
-            onChange={(e) => setNewGroupName(e.target.value)}
-            placeholder="New group name"
-            className="input input-bordered input-sm flex-1"
-          />
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            disabled={isPending || !newGroupName.trim()}
-            onClick={() => onCreate(newGroupName)}
-          >
-            Create &amp; add
-          </button>
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <input
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              placeholder="New group name"
+              className="input input-bordered input-sm flex-1"
+            />
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              disabled={isPending || !newGroupName.trim()}
+              onClick={() => onCreate(newGroupName, newGroupColor)}
+            >
+              Create &amp; add
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {GROUP_COLOR_PRESETS.map((preset) => (
+              <button
+                key={preset.value}
+                type="button"
+                title={preset.name}
+                aria-label={preset.name}
+                onClick={() => setNewGroupColor((c) => (c === preset.value ? null : preset.value))}
+                className={`h-5 w-5 rounded-full border-2 ${
+                  newGroupColor === preset.value ? "border-primary" : "border-transparent"
+                }`}
+                style={{ backgroundColor: preset.value }}
+              />
+            ))}
+          </div>
         </div>
 
         <div className="modal-action">

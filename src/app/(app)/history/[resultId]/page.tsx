@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { SessionResultDetail } from "@/lib/supabase/database.types";
+import BackButton from "@/components/ui/BackButton";
 
 export default async function HistoryDetailPage({
   params,
@@ -31,10 +32,8 @@ export default async function HistoryDetailPage({
 
   return (
     <div className="flex flex-col gap-4">
+      <BackButton href="/history" label="History" />
       <div>
-        <Link href="/history" className="btn btn-ghost btn-xs mb-1">
-          ← History
-        </Link>
         <h1 className="text-xl font-bold">{result.set_name ?? "Deleted set"}</h1>
         <p className="text-sm opacity-60">
           {new Date(result.completed_at).toLocaleString(undefined, {

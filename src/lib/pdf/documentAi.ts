@@ -6,7 +6,7 @@
 // Setup is documented in docs/pdf-import.md.
 
 import { createSign } from "node:crypto";
-import type { ExtractedRow } from "./extractVocab";
+import { sanitizeEnglishColumn, type ExtractedRow } from "./extractVocab";
 import { assignColumnRoles, scoreTexts } from "./roles";
 import type { ColumnRole } from "./templates";
 
@@ -172,7 +172,8 @@ function tableToRows(table: DocAiTable, documentText: string, pageNumber: number
       row[role] = row[role] ? `${row[role]} ${value}` : value;
     }
 
-    if (row.reading && row.english) rows.push(row);
+    const sanitized = sanitizeEnglishColumn(row);
+    if (sanitized.reading && sanitized.english) rows.push(sanitized);
   }
 
   return rows;

@@ -1,4 +1,5 @@
 import { importSharedSet } from "@/lib/actions/sets";
+import BackButton from "@/components/ui/BackButton";
 
 export default async function ShareImportPage({
   searchParams,
@@ -9,6 +10,7 @@ export default async function ShareImportPage({
 
   return (
     <div className="flex flex-col gap-4">
+      <BackButton href="/dashboard" />
       <h1 className="text-xl font-bold">Import a shared set</h1>
       <p className="text-sm opacity-70">
         Paste a share code or the link a friend sent you to add a copy of their set to your own library.

@@ -114,18 +114,21 @@ export interface Database {
           id: string;
           set_id: string;
           name: string;
+          color: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           set_id: string;
           name: string;
+          color?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           set_id?: string;
           name?: string;
+          color?: string | null;
           created_at?: string;
         };
         Relationships: [];

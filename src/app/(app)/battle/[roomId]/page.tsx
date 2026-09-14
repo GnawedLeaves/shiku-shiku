@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { deleteBattleRoom, leaveBattleRoom, toggleReady } from "@/lib/actions/battle";
 import Avatar from "@/components/Avatar";
 import SubmitButton from "@/components/ui/SubmitButton";
+import BackButton from "@/components/ui/BackButton";
 
 export default async function BattleRoomPage({
   params,
@@ -42,10 +42,8 @@ export default async function BattleRoomPage({
 
   return (
     <div className="flex flex-col gap-4">
+      <BackButton href="/battle" label="Battles" />
       <div>
-        <Link href="/battle" className="btn btn-ghost btn-xs mb-1">
-          ← Battles
-        </Link>
         <h1 className="text-xl font-bold">{room.name ?? `Room ${room.code}`}</h1>
         <p className="text-sm opacity-60">Status: {room.status}</p>
       </div>

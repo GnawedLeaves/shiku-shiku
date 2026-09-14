@@ -39,7 +39,7 @@ export default function ImportReview({
   setId: string;
   templates: TemplateOption[];
   defaultTemplateId: string;
-  groups: { id: string; name: string }[];
+  groups: { id: string; name: string; color?: string | null }[];
 }) {
   const router = useRouter();
   const [templateId, setTemplateId] = useState(defaultTemplateId);
@@ -304,6 +304,13 @@ export default function ImportReview({
                           )
                         }
                       />
+                      {group.color && (
+                        <span
+                          className="h-2.5 w-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: group.color }}
+                          aria-hidden="true"
+                        />
+                      )}
                       <span className="label-text">{group.name}</span>
                     </label>
                   ))}

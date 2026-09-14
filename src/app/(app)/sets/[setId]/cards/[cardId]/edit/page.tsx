@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { updateCard } from "@/lib/actions/cards";
 import CardFields from "@/components/CardFields";
 import SubmitButton from "@/components/ui/SubmitButton";
+import BackButton from "@/components/ui/BackButton";
 
 export default async function EditCardPage({
   params,
@@ -14,7 +15,7 @@ export default async function EditCardPage({
   const supabase = await createClient();
   const [{ data: card }, { data: groups }, { data: links }] = await Promise.all([
     supabase.from("cards").select("*").eq("id", cardId).single(),
-    supabase.from("groups").select("id, name").eq("set_id", setId).order("created_at"),
+    supabase.from("groups").select("id, name, color").eq("set_id", setId).order("created_at"),
     supabase.from("card_groups").select("group_id").eq("card_id", cardId),
   ]);
 
@@ -22,6 +23,7 @@ export default async function EditCardPage({
 
   return (
     <div className="flex flex-col gap-4">
+      <BackButton href={`/sets/${setId}`} />
       <h1 className="text-xl font-bold">Edit card</h1>
 
       <form action={updateCard.bind(null, setId, cardId)} className="card bg-base-100 shadow-sm">

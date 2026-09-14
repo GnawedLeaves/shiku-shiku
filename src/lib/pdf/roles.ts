@@ -29,13 +29,24 @@ export function scoreTexts(texts: Iterable<string>): ColumnScore {
 }
 
 /**
- * Assigns at most one column to each role, strongest candidate first:
- * a digits-only column is the row number, the most kana-heavy column is the
- * reading, the most ideograph-heavy of what's left is the kanji, and the most
- * latin column is the English meaning. Everything else is "other".
+ * Assigns at most one column to each role. `columns` must already be in
+ * left-to-right reading order -- position, not just script, is what's needed
+ * to tell a kanji column apart from a Chinese-meaning column, since both are
+ * CJK ideographs and score identically on script alone.
+ *
+ * Order of assignment: a digits-only column is the row number; the most
+ * kana-heavy column is the reading; the most latin-heavy column is the
+ * English meaning. Kanji and Chinese meaning are resolved together last,
+ * using position relative to English: in every sheet seen so far, kanji sits
+ * to English's left and the Chinese meaning to its right. Scoring by raw
+ * ideograph count instead would pick whichever column has *more* content
+ * across the sheet, which is reliably the Chinese-meaning column -- kanji
+ * cells are often blank (not every word has kanji) while the Chinese meaning
+ * is filled in on every row, so it would win a pure volume contest and get
+ * mislabeled as kanji. Everything left over is "other".
  */
 export function assignColumnRoles<T>(columns: T[], score: (column: T) => ColumnScore): Map<T, ColumnRole> {
-  const scored = columns.map((column) => ({ column, score: score(column) }));
+  const scored = columns.map((column, order) => ({ column, order, score: score(column) }));
   const roles = new Map<T, ColumnRole>();
   const taken = new Set<(typeof scored)[number]>();
 
@@ -56,18 +67,25 @@ export function assignColumnRoles<T>(columns: T[], score: (column: T) => ColumnS
       .find((s) => s.score.kana > 0),
     "reading"
   );
-  claim(
-    available()
-      .sort((a, b) => b.score.ideographs - a.score.ideographs)
-      .find((s) => s.score.ideographs > 0),
-    "kanji"
-  );
-  claim(
-    available()
-      .sort((a, b) => b.score.latin - a.score.latin)
-      .find((s) => s.score.latin > 0),
-    "english"
-  );
+  const english = available()
+    .sort((a, b) => b.score.latin - a.score.latin)
+    .find((s) => s.score.latin > 0);
+  claim(english, "english");
+
+  const ideographCandidates = available()
+    .filter((s) => s.score.ideographs > 0)
+    .sort((a, b) => b.score.ideographs - a.score.ideographs);
+
+  if (english) {
+    claim(
+      ideographCandidates.find((s) => s.order < english.order),
+      "kanji"
+    );
+  } else {
+    // No English column was found at all, so there's no position to resolve
+    // the ambiguity against -- fall back to "most ideograph-heavy wins".
+    claim(ideographCandidates[0], "kanji");
+  }
 
   return roles;
 }

@@ -91,6 +91,18 @@ export async function deleteCard(setId: string, cardId: string) {
   revalidatePath(`/sets/${setId}`);
 }
 
+/** Deletes every selected card in one request. RLS still scopes this to the caller's own sets. */
+export async function deleteCards(setId: string, cardIds: string[]) {
+  if (cardIds.length === 0) return 0;
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("cards").delete().in("id", cardIds);
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/sets/${setId}`);
+  return cardIds.length;
+}
+
 export async function bulkCreateCards(setId: string, rows: CardDraft[], groupIds: string[] = []) {
   const supabase = await createClient();
 

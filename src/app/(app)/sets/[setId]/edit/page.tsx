@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { updateSet } from "@/lib/actions/sets";
+import BackButton from "@/components/ui/BackButton";
 
 export default async function EditSetPage({ params }: { params: Promise<{ setId: string }> }) {
   const { setId } = await params;
@@ -17,6 +18,7 @@ export default async function EditSetPage({ params }: { params: Promise<{ setId:
 
   return (
     <div className="flex flex-col gap-4">
+      <BackButton href={`/sets/${setId}`} />
       <h1 className="text-xl font-bold">Edit set</h1>
       <form action={save} className="card bg-base-100 shadow-sm">
         <div className="card-body gap-3">

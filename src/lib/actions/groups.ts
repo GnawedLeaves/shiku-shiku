@@ -2,13 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { isValidGroupColor } from "@/lib/study/groupColors";
+
+/** Returns a valid hex color from a form field, or null (no color / clear it). */
+function readColor(formData: FormData): string | null {
+  const raw = String(formData.get("color") ?? "").trim();
+  return raw && isValidGroupColor(raw) ? raw : null;
+}
 
 export async function createGroup(setId: string, formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
 
   const supabase = await createClient();
-  await supabase.from("groups").insert({ set_id: setId, name });
+  await supabase.from("groups").insert({ set_id: setId, name, color: readColor(formData) });
   revalidatePath(`/sets/${setId}`);
 }
 
@@ -17,7 +24,10 @@ export async function renameGroup(setId: string, groupId: string, formData: Form
   if (!name) return;
 
   const supabase = await createClient();
-  await supabase.from("groups").update({ name }).eq("id", groupId);
+  await supabase
+    .from("groups")
+    .update({ name, color: readColor(formData) })
+    .eq("id", groupId);
   revalidatePath(`/sets/${setId}`);
 }
 
@@ -51,14 +61,19 @@ export async function addCardsToGroups(setId: string, cardIds: string[], groupId
 }
 
 /** Creates a group and immediately tags the selected cards with it. */
-export async function createGroupWithCards(setId: string, name: string, cardIds: string[]) {
+export async function createGroupWithCards(
+  setId: string,
+  name: string,
+  cardIds: string[],
+  color?: string | null
+) {
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Group name is required");
 
   const supabase = await createClient();
   const { data: group, error } = await supabase
     .from("groups")
-    .insert({ set_id: setId, name: trimmed })
+    .insert({ set_id: setId, name: trimmed, color: color && isValidGroupColor(color) ? color : null })
     .select("id")
     .single();
 

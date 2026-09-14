@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { removeAvatar, updateProfile, uploadAvatar } from "@/lib/actions/profile";
 import Avatar from "@/components/Avatar";
 import SubmitButton from "@/components/ui/SubmitButton";
+import BackButton from "@/components/ui/BackButton";
 
 export default async function ProfilePage({
   searchParams,
@@ -37,6 +38,7 @@ export default async function ProfilePage({
 
   return (
     <div className="flex flex-col gap-4">
+      <BackButton href="/settings" />
       <h1 className="text-xl font-bold">Your profile</h1>
 
       {error && <div className="alert alert-error text-sm py-2">{error}</div>}

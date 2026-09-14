@@ -11,6 +11,7 @@ Swipeable flashcards for learning Japanese vocab. Next.js (App Router) + TypeScr
    - `supabase/migrations/0002_social_history_tagging.sql` — profile pictures, card tagging,
      study history, friends, scoreboards, battle rooms, and the fast one-roundtrip grading
      function. It also creates the `avatars` storage bucket.
+   - `supabase/migrations/0003_group_colors.sql` — adds a colour to groups (tags).
 3. (Optional, for "Continue with Google") Follow [docs/google-oauth-setup.md](docs/google-oauth-setup.md)
    — a step-by-step walkthrough of the Google Cloud and Supabase dashboards, plus how the callback
    code works.
@@ -49,14 +50,17 @@ start a study session.
 ## What's implemented
 
 - Email/password + Google sign-in (Supabase Auth), progress kept per user.
-- Sets, card groups used as **tags** (a card can be in several), and manual card entry.
+- Sets, card groups used as **coloured tags** (a card can be in several; pick a preset colour or a
+  custom one per group), and manual card entry. Select cards in bulk to tag or delete them at once.
 - **Japanese suggestions while you type** — enter the English meaning and the card form offers
   dictionary matches (Jisho), filling in kana, kanji and romaji. Romaji also auto-derives from the
   kana as you type it.
 - **PDF import** — upload a lesson PDF and the word table is extracted, page by page; pages with no
   table (grammar notes, scans) are skipped and reported. Layout templates are selectable, with an
-  optional Google Document AI OCR fallback for scanned sheets. See
-  [docs/pdf-import.md](docs/pdf-import.md).
+  optional Google Document AI OCR fallback for scanned sheets. A fixed template that stops matching
+  a particular file's column positions (different lessons in the same course routinely shift them)
+  automatically retries that page with auto-detected columns rather than silently dropping rows.
+  See [docs/pdf-import.md](docs/pdf-import.md).
 - Swipeable study sessions (drag or buttons), pause/resume, up to 5 sessions in progress at once,
   scoped to a whole set, specific group(s), or a random sample (10/20/50/custom).
 - **Study history** — every finished session with score, duration and a per-card right/wrong

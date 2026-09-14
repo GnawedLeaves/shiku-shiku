@@ -7,6 +7,7 @@ import type { JapaneseSuggestion } from "@/lib/japanese/suggest";
 interface GroupOption {
   id: string;
   name: string;
+  color?: string | null;
 }
 
 /**
@@ -202,6 +203,13 @@ export default function CardFields({
                   defaultChecked={selectedGroupIds.includes(group.id)}
                   className="checkbox checkbox-sm"
                 />
+                {group.color && (
+                  <span
+                    className="h-2.5 w-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: group.color }}
+                    aria-hidden="true"
+                  />
+                )}
                 <span className="label-text">{group.name}</span>
               </label>
             ))}

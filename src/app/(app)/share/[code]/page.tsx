@@ -1,4 +1,5 @@
 import { importSharedSet } from "@/lib/actions/sets";
+import BackButton from "@/components/ui/BackButton";
 
 export default async function ShareLinkPage({
   params,
@@ -12,6 +13,7 @@ export default async function ShareLinkPage({
 
   return (
     <div className="flex flex-col gap-4">
+      <BackButton href="/dashboard" />
       <h1 className="text-xl font-bold">Import shared set</h1>
       <p className="text-sm opacity-70">
         Someone shared a flashcard set with you. Importing adds your own copy to your library — it

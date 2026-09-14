@@ -33,6 +33,13 @@ export interface PdfTemplate {
    * above the word it annotates and would otherwise pollute the cells.
    */
   minGlyphHeight: number;
+  /**
+   * Glyphs taller than this (in pt) are dropped -- a page title or lesson
+   * heading (e.g. "Lesson 6") repeats once per page in a much larger font
+   * than the table body, which is enough for it to form its own column
+   * cluster in auto-detect mode and get swept into a row's cells.
+   */
+  maxGlyphHeight: number;
 }
 
 export const PDF_TEMPLATES: PdfTemplate[] = [
@@ -54,6 +61,7 @@ export const PDF_TEMPLATES: PdfTemplate[] = [
     requireRoles: ["reading", "english"],
     minRowsPerPage: 3,
     minGlyphHeight: 8,
+    maxGlyphHeight: 17,
   },
   {
     id: "standard-2col",
@@ -67,6 +75,7 @@ export const PDF_TEMPLATES: PdfTemplate[] = [
     requireRoles: ["reading", "english"],
     minRowsPerPage: 3,
     minGlyphHeight: 6,
+    maxGlyphHeight: 17,
   },
   {
     id: "auto",
@@ -78,6 +87,7 @@ export const PDF_TEMPLATES: PdfTemplate[] = [
     requireRoles: ["reading", "english"],
     minRowsPerPage: 3,
     minGlyphHeight: 6,
+    maxGlyphHeight: 17,
   },
   {
     id: "document-ai",
@@ -89,6 +99,7 @@ export const PDF_TEMPLATES: PdfTemplate[] = [
     requireRoles: ["reading", "english"],
     minRowsPerPage: 1,
     minGlyphHeight: 0,
+    maxGlyphHeight: Infinity,
   },
 ];
 

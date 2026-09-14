@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Avatar from "@/components/Avatar";
+import BackButton from "@/components/ui/BackButton";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
@@ -32,10 +32,8 @@ export default async function SetScoreboardPage({
 
   return (
     <div className="flex flex-col gap-4">
+      <BackButton href={`/sets/${setId}`} label={set.name} />
       <div>
-        <Link href={`/sets/${setId}`} className="btn btn-ghost btn-xs mb-1">
-          ← {set.name}
-        </Link>
         <h1 className="text-xl font-bold">Scoreboard</h1>
         <p className="text-sm opacity-60">
           Best score per person across this set and every shared copy of it.

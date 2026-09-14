@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import ImportReview from "@/components/ImportReview";
 import { isDocumentAiConfigured } from "@/lib/pdf/documentAi";
 import { DEFAULT_TEMPLATE_ID, PDF_TEMPLATES } from "@/lib/pdf/templates";
+import BackButton from "@/components/ui/BackButton";
 
 export default async function ImportPage({ params }: { params: Promise<{ setId: string }> }) {
   const { setId } = await params;
@@ -15,7 +16,7 @@ export default async function ImportPage({ params }: { params: Promise<{ setId: 
 
   const [{ data: set }, { data: groups }, { data: profile }] = await Promise.all([
     supabase.from("sets").select("id, name").eq("id", setId).single(),
-    supabase.from("groups").select("id, name").eq("set_id", setId).order("created_at"),
+    supabase.from("groups").select("id, name, color").eq("set_id", setId).order("created_at"),
     supabase.from("profiles").select("pdf_template_id").eq("id", user.id).single(),
   ]);
 
@@ -36,6 +37,7 @@ export default async function ImportPage({ params }: { params: Promise<{ setId: 
 
   return (
     <div className="flex flex-col gap-4">
+      <BackButton href={`/sets/${setId}`} />
       <h1 className="text-xl font-bold">Import into {set.name}</h1>
       <ImportReview
         setId={setId}

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createBattleRoom, joinBattleRoom } from "@/lib/actions/battle";
 import SubmitButton from "@/components/ui/SubmitButton";
+import BackButton from "@/components/ui/BackButton";
 
 export default async function BattlePage({
   searchParams,
@@ -32,6 +33,7 @@ export default async function BattlePage({
 
   return (
     <div className="flex flex-col gap-4">
+      <BackButton href="/settings" />
       <div>
         <h1 className="text-xl font-bold">Flashcard battles</h1>
         <p className="text-sm opacity-60">
