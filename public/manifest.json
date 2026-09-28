@@ -4,8 +4,8 @@
   "description": "Learn Japanese vocabulary with swipeable flashcards.",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#6d28d9",
+  "background_color": "#d9d9d9",
+  "theme_color": "#d9d9d9",
   "orientation": "portrait",
   "icons": [
     {

@@ -206,7 +206,7 @@ export default function CardsList({
         <span className="text-xs opacity-60">{selected.size} selected</span>
       </div>
 
-      <div className="card bg-base-100 shadow-sm">
+      <div className="card bg-base-100">
         <div className="card-body p-2">
           {visibleCards.length === 0 && (
             <p className="text-sm opacity-60 p-2">No cards in this group yet.</p>
@@ -256,7 +256,7 @@ export default function CardsList({
 
       {/* Actions for the current selection */}
       {selected.size > 0 && (
-        <div className="card bg-base-100 shadow-sm sticky bottom-20 z-10 border border-primary/20">
+        <div className="card bg-base-100 sticky bottom-20 z-10 border border-iron">
           <div className="card-body p-3 gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium">{selected.size} card(s) selected</span>
@@ -448,8 +448,8 @@ function TagDialog({
                 title={preset.name}
                 aria-label={preset.name}
                 onClick={() => setNewGroupColor((c) => (c === preset.value ? null : preset.value))}
-                className={`h-5 w-5 rounded-full border-2 ${
-                  newGroupColor === preset.value ? "border-primary" : "border-transparent"
+                className={`h-5 w-5 rounded-full ${
+                  newGroupColor === preset.value ? "ring-2 ring-iron ring-offset-2 ring-offset-concrete" : ""
                 }`}
                 style={{ backgroundColor: preset.value }}
               />

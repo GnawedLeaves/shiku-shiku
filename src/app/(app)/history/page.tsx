@@ -45,7 +45,7 @@ export default async function HistoryPage() {
         </div>
       ) : (
         <>
-          <div className="stats stats-horizontal shadow-sm bg-base-100 w-full">
+          <div className="stats stats-horizontal bg-base-100 w-full">
             <div className="stat p-3">
               <div className="stat-title text-xs">Sessions</div>
               <div className="stat-value text-2xl">{sessions.length}</div>
@@ -67,7 +67,7 @@ export default async function HistoryPage() {
               <Link
                 key={session.id}
                 href={`/history/${session.id}`}
-                className="card bg-base-100 shadow-sm hover:bg-base-200 transition-colors"
+                className="card bg-base-100 hover:bg-base-200 transition-colors"
               >
                 <div className="card-body p-4 gap-1">
                   <div className="flex items-center justify-between gap-2">

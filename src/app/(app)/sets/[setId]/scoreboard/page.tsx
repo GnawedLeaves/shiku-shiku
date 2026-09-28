@@ -56,13 +56,13 @@ export default async function SetScoreboardPage({
           <span>No finished sessions for this set yet.</span>
         </div>
       ) : (
-        <div className="card bg-base-100 shadow-sm">
+        <div className="card bg-base-100">
           <div className="card-body p-2">
             {scores.map((row, index) => (
               <div
                 key={row.user_id}
                 className={`flex items-center gap-3 p-2 rounded-box ${
-                  row.user_id === user.id ? "bg-primary/10" : ""
+                  row.user_id === user.id ? "bg-iron text-concrete" : ""
                 }`}
               >
                 <span className="w-6 text-center font-semibold">

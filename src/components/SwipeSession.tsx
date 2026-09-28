@@ -110,15 +110,16 @@ export default function SwipeSession({
 
   if (isComplete) {
     return (
-      <div className="flex flex-col items-center gap-4 py-12">
-        <h1 className="text-2xl font-bold">Session complete!</h1>
+      <div className="flex flex-col gap-6 py-8">
+        <h1 className="display">Done.</h1>
+        <hr className="hairline" />
         {score && score.total > 0 && (
-          <p className="text-lg">
-            {score.correct} / {score.total} correct (
-            {Math.round((score.correct / score.total) * 100)}%)
+          <p className="text-subheading">
+            {score.correct} / {score.total} correct —{" "}
+            {Math.round((score.correct / score.total) * 100)}%
           </p>
         )}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link href="/history" className="btn btn-outline">
             See history
           </Link>
@@ -211,7 +212,7 @@ function SwipeCard({
   return (
     <div className="flex flex-1 min-h-0 flex-col items-center gap-4">
       <motion.div
-        className="card w-full max-w-md flex-1 min-h-0 bg-base-100 shadow-xl select-none cursor-grab active:cursor-grabbing"
+        className="card w-full max-w-md flex-1 min-h-0 select-none cursor-grab active:cursor-grabbing"
         style={{ touchAction: "pan-y" }}
         drag={revealed ? "x" : false}
         dragConstraints={{ left: 0, right: 0 }}
@@ -234,12 +235,12 @@ function SwipeCard({
           }}
         >
           <p className="text-sm opacity-60 uppercase tracking-wide">Question</p>
-          <h2 className="text-3xl font-bold px-2">{card.question}</h2>
+          <h2 className="text-heading px-2 break-words">{card.question}</h2>
           {revealed ? (
             <>
               <div className="divider my-2" />
               <p className="text-sm opacity-60 uppercase tracking-wide">Answer</p>
-              <p className="text-2xl">{formatAnswer(card, answerMode)}</p>
+              <p className="text-subheading">{formatAnswer(card, answerMode)}</p>
               {card.answer_kanji && <p className="text-base opacity-60 mt-1">{card.answer_kanji}</p>}
             </>
           ) : (
@@ -250,20 +251,12 @@ function SwipeCard({
 
       {revealed && (
         <>
-          <div className="flex gap-6 shrink-0">
-            <button
-              className="btn btn-error btn-circle btn-lg text-2xl"
-              onClick={() => onGrade("incorrect")}
-              aria-label="Don't know"
-            >
-              ✗
+          <div className="flex w-full max-w-md gap-2 shrink-0">
+            <button className="btn btn-outline flex-1" onClick={() => onGrade("incorrect")}>
+              Don&apos;t know
             </button>
-            <button
-              className="btn btn-success btn-circle btn-lg text-2xl"
-              onClick={() => onGrade("correct")}
-              aria-label="Got it"
-            >
-              ✓
+            <button className="btn btn-primary flex-1" onClick={() => onGrade("correct")}>
+              Got it
             </button>
           </div>
           <p className="text-xs opacity-50 shrink-0">
@@ -298,13 +291,13 @@ function GroupBatch({
 
   return (
     <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto">
-      <h2 className="font-semibold">{groupName}</h2>
+      <h2 className="text-subheading">{groupName}</h2>
       <p className="text-xs opacity-60">Review each card in this group, then grade it.</p>
       {pendingIds.map((cardId) => {
         const card = cardsById[cardId];
         const isRevealed = revealed.has(cardId);
         return (
-          <div key={cardId} className="card bg-base-100 shadow-sm">
+          <div key={cardId} className="card">
             <div className="card-body p-4 gap-2">
               <p className="font-medium">{card.question}</p>
               {isRevealed ? (
@@ -312,13 +305,13 @@ function GroupBatch({
                   <p className="text-sm opacity-70">{formatAnswer(card, answerMode)}</p>
                   <div className="flex gap-2 mt-1">
                     <button
-                      className="btn btn-error btn-xs"
+                      className="btn btn-outline btn-xs"
                       onClick={() => onGrade(cardId, "incorrect")}
                     >
                       Don&apos;t know
                     </button>
                     <button
-                      className="btn btn-success btn-xs"
+                      className="btn btn-primary btn-xs"
                       onClick={() => onGrade(cardId, "correct")}
                     >
                       Got it

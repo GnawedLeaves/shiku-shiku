@@ -32,7 +32,7 @@ export default async function NewCardPage({
 
       {error && <div className="alert alert-error text-sm py-2">{error}</div>}
 
-      <form action={createCard.bind(null, setId)} className="card bg-base-100 shadow-sm">
+      <form action={createCard.bind(null, setId)} className="card bg-base-100">
         <div className="card-body gap-3">
           <CardFields groups={groups ?? []} selectedGroupIds={group ? [group] : []} />
           <SubmitButton className="btn btn-primary mt-2" pendingText="Adding…">

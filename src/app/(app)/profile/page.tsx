@@ -43,7 +43,7 @@ export default async function ProfilePage({
 
       {error && <div className="alert alert-error text-sm py-2">{error}</div>}
 
-      <div className="card bg-base-100 shadow-sm">
+      <div className="card bg-base-100">
         <div className="card-body p-4 gap-4">
           <div className="flex items-center gap-4">
             <Avatar url={profile?.avatar_url} name={profile?.display_name ?? user.email} size="lg" />
@@ -83,7 +83,7 @@ export default async function ProfilePage({
         </div>
       </div>
 
-      <div className="card bg-base-100 shadow-sm">
+      <div className="card bg-base-100">
         <div className="card-body p-4 gap-3">
           <h2 className="font-semibold text-sm">Details</h2>
           <form action={updateProfile} className="flex flex-col gap-3">
@@ -115,7 +115,7 @@ export default async function ProfilePage({
         </div>
       </div>
 
-      <div className="stats stats-horizontal shadow-sm bg-base-100 w-full">
+      <div className="stats stats-horizontal bg-base-100 w-full">
         <div className="stat p-3">
           <div className="stat-title text-xs">Friends</div>
           <div className="stat-value text-2xl">{friendCount ?? 0}</div>

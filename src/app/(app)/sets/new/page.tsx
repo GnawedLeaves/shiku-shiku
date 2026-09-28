@@ -15,7 +15,7 @@ export default async function NewSetPage({
 
       {params.error && <div className="alert alert-error text-sm py-2">{params.error}</div>}
 
-      <form action={createSet} className="card bg-base-100 shadow-sm">
+      <form action={createSet} className="card bg-base-100">
         <div className="card-body gap-3">
           <label className="form-control">
             <span className="label-text mb-1">Name</span>

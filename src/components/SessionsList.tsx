@@ -34,7 +34,7 @@ export default function SessionsList({ sessions }: { sessions: SessionRow[] }) {
       {sessions.map((s) => (
         <div
           key={s.id}
-          className="flex items-center justify-between gap-2 bg-base-100 rounded-box p-3 shadow-sm"
+          className="flex items-center justify-between gap-2 bg-base-100 rounded-box p-3"
         >
           <div>
             <p className="font-medium">{s.name || "Untitled session"}</p>

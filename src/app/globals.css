@@ -2,44 +2,302 @@
 @plugin "daisyui" {
   themes: false;
 }
+
+/*
+ * "Building-scale typography on painted concrete."
+ * A flat concrete canvas, near-black iron for text / borders / pill buttons,
+ * and four paint colours reserved for identity blocks (groups, highlights) --
+ * never for status. No shadows, no gradients, no rounded cards.
+ */
 @plugin "daisyui/theme" {
   name: "shikushiku";
   default: true;
   prefersdark: false;
   color-scheme: light;
-  --color-base-100: oklch(99% 0.01 320);
-  --color-base-200: oklch(96% 0.02 320);
-  --color-base-300: oklch(92% 0.03 320);
-  --color-base-content: oklch(25% 0.03 320);
-  --color-primary: oklch(58% 0.19 320);
-  --color-primary-content: oklch(98% 0.01 320);
-  --color-secondary: oklch(75% 0.15 350);
-  --color-secondary-content: oklch(20% 0.03 350);
-  --color-accent: oklch(80% 0.15 180);
-  --color-accent-content: oklch(20% 0.03 180);
-  --color-neutral: oklch(30% 0.02 320);
-  --color-neutral-content: oklch(96% 0.01 320);
-  --color-info: oklch(75% 0.12 220);
-  --color-success: oklch(76% 0.16 150);
-  --color-warning: oklch(82% 0.16 85);
-  --color-error: oklch(65% 0.22 25);
-  --radius-box: 1rem;
-  --radius-field: 0.75rem;
-  --radius-selector: 1rem;
+  --color-base-100: #d9d9d9;
+  --color-base-200: #d9d9d9;
+  --color-base-300: #c4c4c4;
+  --color-base-content: #1f1f1f;
+  --color-primary: #1f1f1f;
+  --color-primary-content: #d9d9d9;
+  --color-secondary: #1f1f1f;
+  --color-secondary-content: #d9d9d9;
+  --color-accent: #1f1f1f;
+  --color-accent-content: #d9d9d9;
+  --color-neutral: #1f1f1f;
+  --color-neutral-content: #d9d9d9;
+  /* Status colours are deliberately NOT the paint colours. */
+  --color-info: #1f1f1f;
+  --color-info-content: #d9d9d9;
+  --color-success: #2f5d3a;
+  --color-success-content: #eaeaea;
+  --color-warning: #7a5a12;
+  --color-warning-content: #eaeaea;
+  --color-error: #9b2c24;
+  --color-error-content: #eaeaea;
+  --radius-box: 0;
+  --radius-field: 100px;
+  --radius-selector: 100px;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
 }
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-the-green: #027b49;
+  --color-the-pink: #f19ec8;
+  --color-the-red: #fa4d43;
+  --color-the-yellow: #fbb833;
+  --color-concrete: #d9d9d9;
+  --color-iron: #1f1f1f;
+  --color-carbon: #000000;
+
+  --text-caption: 12px;
+  --text-caption--line-height: 1.2;
+  --text-body: 15px;
+  --text-body--line-height: 1.2;
+  --text-body-sm: 18px;
+  --text-body-sm--line-height: 1.1;
+  --text-subheading: 26px;
+  --text-subheading--line-height: 1;
+  --text-subheading--letter-spacing: -0.03em;
+  --text-heading: 60px;
+  --text-heading--line-height: 0.8;
+  --text-heading--letter-spacing: -0.03em;
+  --text-display: 215px;
+  --text-display--line-height: 0.7;
+  --text-display--letter-spacing: -0.06em;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-teka), "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP",
+    ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-teka), ui-monospace, monospace;
+}
+
+/* ---------------------------------------------------------------------------
+ * Global type. Unlayered, so these win over the per-page utility classes
+ * (`text-xl font-bold` on every page title, etc.) without touching each page.
+ * ------------------------------------------------------------------------- */
+
+html,
+body {
+  background: var(--color-concrete);
+  color: var(--color-iron);
 }
 
 body {
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-bold,
+.font-semibold,
+.font-medium,
+.card-title,
+.stat-value {
+  font-weight: 400;
+}
+
+h1 {
+  font-size: clamp(44px, 12vw, 60px);
+  line-height: 0.8;
+  letter-spacing: -0.03em;
+}
+
+h2,
+h3 {
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+h2.text-sm,
+h3.text-sm,
+.card-title {
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+/* Section labels are quiet inline copy, not shouted caps. */
+.uppercase.tracking-wide {
+  letter-spacing: 0;
+}
+
+/* Display type: stacked into a wall. */
+.display {
+  font-size: clamp(88px, 40vw, 215px);
+  line-height: 0.7;
+  letter-spacing: -0.06em;
+  font-weight: 400;
+}
+
+.caption {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+/* ---------------------------------------------------------------------------
+ * daisyUI component overrides -- ruthlessly flat, hairlines do the structure.
+ * ------------------------------------------------------------------------- */
+
+.card,
+.alert,
+.stats,
+.collapse {
+  background: transparent;
+  border: 1px solid var(--color-iron);
+  border-radius: 0;
+}
+
+.modal-box {
+  border: 1px solid var(--color-iron);
+  border-radius: 0;
+  background: var(--color-concrete);
+}
+
+.card-body {
+  gap: 10px;
+}
+
+/* Clickable list cards invert on hover instead of lifting. */
+a.card:hover {
+  background: var(--color-iron);
+  color: var(--color-concrete);
+}
+
+.alert-error {
+  background: transparent;
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.stat {
+  border-color: var(--color-iron) !important;
+  border-style: solid !important;
+}
+
+.stat-value {
+  letter-spacing: -0.03em;
+}
+
+.btn {
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  border-radius: 100px;
+  background-image: none;
+}
+
+.btn,
+.btn-sm {
+  font-size: 15px;
+}
+
+.btn-xs {
+  font-size: 13px;
+}
+
+.btn-lg {
+  font-size: 18px;
+}
+
+.btn-outline {
+  border-color: var(--color-iron);
+}
+
+.btn-circle {
+  border-radius: 100px;
+}
+
+.input,
+.select,
+.textarea,
+.file-input {
+  background: transparent;
+  border-color: var(--color-iron);
+  border-radius: 0;
+}
+
+.input:focus,
+.input:focus-within,
+.select:focus,
+.textarea:focus {
+  outline: 2px solid var(--color-iron);
+  outline-offset: -1px;
+}
+
+.checkbox,
+.radio,
+.toggle {
+  border-color: var(--color-iron);
+}
+
+.checkbox {
+  border-radius: 0;
+}
+
+.badge {
+  font-weight: 400;
+  border-color: var(--color-iron);
+}
+
+.badge-ghost {
+  background: transparent;
+}
+
+.divider {
+  margin-block: 10px;
+}
+
+.divider::before,
+.divider::after {
+  height: 1px;
+  background: var(--color-iron);
+}
+
+.progress {
+  border-radius: 0;
+  height: 4px;
+  background: color-mix(in oklab, var(--color-iron) 15%, transparent);
+}
+
+.skeleton {
+  border-radius: 0;
+  background-color: #c9c9c9;
+  background-image: none;
+}
+
+.link {
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.link-primary {
+  color: var(--color-iron);
+}
+
+.rounded-box {
+  border-radius: 0;
+}
+
+.tabs-box {
+  background: transparent;
+  border: 1px solid var(--color-iron);
+  border-radius: 100px;
+}
+
+/* Hairline section divider -- the line is the break. */
+.hairline {
+  border: 0;
+  border-top: 1px solid var(--color-iron);
+  margin: 0;
 }

@@ -50,7 +50,7 @@ export default async function BattlePage({
 
       {error && <div className="alert alert-error text-sm py-2">{error}</div>}
 
-      <div className="card bg-base-100 shadow-sm">
+      <div className="card bg-base-100">
         <div className="card-body p-4 gap-3">
           <h2 className="font-semibold text-sm">Create a room</h2>
           <form action={createBattleRoom} className="flex flex-col gap-2">
@@ -74,7 +74,7 @@ export default async function BattlePage({
         </div>
       </div>
 
-      <div className="card bg-base-100 shadow-sm">
+      <div className="card bg-base-100">
         <div className="card-body p-4 gap-3">
           <h2 className="font-semibold text-sm">Join with a code</h2>
           <form action={joinBattleRoom} className="flex gap-2">
@@ -91,7 +91,7 @@ export default async function BattlePage({
         </div>
       </div>
 
-      <div className="card bg-base-100 shadow-sm">
+      <div className="card bg-base-100">
         <div className="card-body p-4 gap-2">
           <h2 className="font-semibold text-sm">Your rooms</h2>
           {rooms.length === 0 && <p className="text-sm opacity-60">You&apos;re not in any rooms yet.</p>}

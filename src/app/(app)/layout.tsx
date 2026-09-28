@@ -15,20 +15,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-base-200">
-      <header className="navbar bg-base-100 shadow-sm sticky top-0 z-10">
-        <div className="flex-1">
-          <Link href="/dashboard" className="btn btn-ghost text-lg">
-            しく Shiku Shiku
+    <div className="flex min-h-screen flex-col bg-concrete">
+      <header className="sticky top-0 z-10 bg-concrete border-b border-iron">
+        <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-4 px-4 py-3 sm:px-6">
+          <Link href="/dashboard" className="text-subheading whitespace-nowrap">
+            しく SHIKU
           </Link>
-        </div>
-        <div className="flex-none">
           <form action={signOut}>
-            <button className="btn btn-ghost btn-sm">Log out</button>
+            <button className="btn btn-primary btn-sm">Log out</button>
           </form>
         </div>
       </header>
-      <main className="flex-1 w-full max-w-2xl mx-auto px-4 pt-4 pb-24">{children}</main>
+      <main className="flex-1 w-full max-w-2xl mx-auto px-4 pt-6 pb-28">{children}</main>
       <BottomNav />
     </div>
   );

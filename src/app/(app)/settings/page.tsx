@@ -25,7 +25,7 @@ export default async function SettingsPage() {
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-bold">Settings</h1>
 
-      <div className="card bg-base-100 shadow-sm">
+      <div className="card bg-base-100">
         <div className="card-body gap-3">
           <h2 className="font-semibold text-sm">Answer display</h2>
           <p className="text-xs opacity-60">
@@ -52,7 +52,7 @@ export default async function SettingsPage() {
         </div>
       </div>
 
-      <div className="card bg-base-100 shadow-sm">
+      <div className="card bg-base-100">
         <div className="card-body gap-3">
           <h2 className="font-semibold text-sm">PDF import template</h2>
           <p className="text-xs opacity-60">
@@ -94,7 +94,7 @@ export default async function SettingsPage() {
         </div>
       </div>
 
-      <div className="card bg-base-100 shadow-sm">
+      <div className="card bg-base-100">
         <div className="card-body gap-2">
           <h2 className="font-semibold text-sm">Account</h2>
           <p className="text-sm opacity-70">{user?.email}</p>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { paintColorFor, readableTextColor } from "@/lib/study/groupColors";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -15,11 +16,14 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Your sets</h1>
-        <Link href="/sets/new" className="btn btn-primary btn-sm">
-          + New set
-        </Link>
+      <div className="flex items-end justify-between gap-4">
+        <h1>Your sets</h1>
+        <div className="flex items-center gap-2">
+          <span className="text-body-sm hidden sm:inline">Something new?</span>
+          <Link href="/sets/new" className="btn btn-primary btn-sm">
+            New set
+          </Link>
+        </div>
       </div>
 
       {(!sets || sets.length === 0) && (
@@ -28,29 +32,41 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      <div className="grid gap-3">
-        {sets?.map((set) => (
-          <Link
-            key={set.id}
-            href={`/sets/${set.id}`}
-            className="card bg-base-100 shadow-sm hover:shadow-md transition-shadow"
-          >
-            <div className="card-body p-4">
-              <h2 className="card-title text-base">{set.name}</h2>
-              {set.description && <p className="text-sm opacity-70">{set.description}</p>}
-              <p className="text-xs opacity-50">
-                {(set.cards as unknown as { count: number }[])?.[0]?.count ?? 0} cards
-              </p>
-            </div>
-          </Link>
-        ))}
+      <div className="grid grid-cols-1 sm:grid-cols-2 border-t border-l border-iron">
+        {sets?.map((set) => {
+          const paint = paintColorFor(set.id);
+          const ink = readableTextColor(paint);
+          const count = (set.cards as unknown as { count: number }[])?.[0]?.count ?? 0;
+          return (
+            <Link
+              key={set.id}
+              href={`/sets/${set.id}`}
+              className="flex min-h-40 flex-col justify-between gap-6 border-b border-r border-iron p-4 transition-opacity hover:opacity-90"
+              style={{ backgroundColor: paint, color: ink }}
+            >
+              <h2 className="text-subheading break-words">{set.name}</h2>
+              <div className="flex flex-col gap-1">
+                {set.description && <p className="text-body line-clamp-2">{set.description}</p>}
+                <p className="flex items-center gap-2 text-body">
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: ink }}
+                    aria-hidden="true"
+                  />
+                  {count} {count === 1 ? "card" : "cards"}
+                </p>
+              </div>
+            </Link>
+          );
+        })}
       </div>
 
-      <div className="divider" />
-
-      <Link href="/share" className="btn btn-outline btn-sm self-start">
-        Import a shared set
-      </Link>
+      <div className="flex items-center gap-2">
+        <span className="text-body-sm">Got a share code?</span>
+        <Link href="/share" className="btn btn-primary btn-sm">
+          Import a set
+        </Link>
+      </div>
     </div>
   );
 }

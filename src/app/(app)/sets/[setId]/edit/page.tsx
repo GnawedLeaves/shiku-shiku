@@ -20,7 +20,7 @@ export default async function EditSetPage({ params }: { params: Promise<{ setId:
     <div className="flex flex-col gap-4">
       <BackButton href={`/sets/${setId}`} />
       <h1 className="text-xl font-bold">Edit set</h1>
-      <form action={save} className="card bg-base-100 shadow-sm">
+      <form action={save} className="card bg-base-100">
         <div className="card-body gap-3">
           <label className="form-control">
             <span className="label-text mb-1">Name</span>

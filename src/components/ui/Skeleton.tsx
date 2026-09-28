@@ -5,7 +5,7 @@ export function SkeletonLine({ className = "" }: { className?: string }) {
 /** Placeholder shaped like the card rows used across list pages. */
 export function SkeletonCard({ lines = 2 }: { lines?: number }) {
   return (
-    <div className="card bg-base-100 shadow-sm">
+    <div className="card bg-base-100">
       <div className="card-body p-4 gap-2">
         <SkeletonLine className="w-1/3 h-5" />
         {Array.from({ length: lines }, (_, i) => (

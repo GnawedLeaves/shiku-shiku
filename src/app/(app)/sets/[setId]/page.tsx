@@ -92,7 +92,7 @@ export default async function SetDetailPage({
         </Link>
       </div>
 
-      <div className="card bg-base-100 shadow-sm">
+      <div className="card bg-base-100">
         <div className="card-body p-4 gap-2">
           <h3 className="font-semibold text-sm">Share this set</h3>
           {shareLink ? (
@@ -114,7 +114,7 @@ export default async function SetDetailPage({
         </div>
       </div>
 
-      <div className="card bg-base-100 shadow-sm">
+      <div className="card bg-base-100">
         <div className="card-body p-4 gap-2">
           <h3 className="font-semibold text-sm">Groups</h3>
           <p className="text-xs opacity-60">

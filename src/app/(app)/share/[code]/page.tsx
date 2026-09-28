@@ -22,7 +22,7 @@ export default async function ShareLinkPage({
 
       {error && <div className="alert alert-error text-sm py-2">{error}</div>}
 
-      <form action={importSharedSet} className="card bg-base-100 shadow-sm">
+      <form action={importSharedSet} className="card bg-base-100">
         <div className="card-body gap-3">
           <p className="text-sm">
             Share code: <span className="font-mono font-semibold">{code}</span>

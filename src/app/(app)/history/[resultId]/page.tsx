@@ -43,7 +43,7 @@ export default async function HistoryDetailPage({
         </p>
       </div>
 
-      <div className="stats stats-horizontal shadow-sm bg-base-100 w-full">
+      <div className="stats stats-horizontal bg-base-100 w-full">
         <div className="stat p-3">
           <div className="stat-title text-xs">Score</div>
           <div className="stat-value text-2xl">{Math.round(result.score_percentage)}%</div>
@@ -94,7 +94,7 @@ function DetailSection({
   const toneClass = tone === "success" ? "text-success" : "text-error";
 
   return (
-    <div className="card bg-base-100 shadow-sm">
+    <div className="card bg-base-100">
       <div className="card-body p-4 gap-2">
         <h2 className={`font-semibold text-sm ${toneClass}`}>
           {title} ({items.length})

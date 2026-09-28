@@ -43,7 +43,7 @@ export default function FriendSearch() {
   }
 
   return (
-    <div className="card bg-base-100 shadow-sm">
+    <div className="card bg-base-100">
       <div className="card-body p-4 gap-3">
         <h2 className="font-semibold text-sm">Find friends</h2>
 

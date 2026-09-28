@@ -58,7 +58,7 @@ export default function StudySessionForm({
   }
 
   return (
-    <form action={createSession} className="card bg-base-100 shadow-sm">
+    <form action={createSession} className="card bg-base-100">
       <div className="card-body gap-3">
         <label className="form-control">
           <span className="label-text mb-1">Set</span>

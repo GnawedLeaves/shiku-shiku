@@ -18,7 +18,7 @@ export default async function ShareImportPage({
 
       {params.error && <div className="alert alert-error text-sm py-2">{params.error}</div>}
 
-      <form action={importSharedSet} className="card bg-base-100 shadow-sm">
+      <form action={importSharedSet} className="card bg-base-100">
         <div className="card-body gap-3">
           <label className="form-control">
             <span className="label-text mb-1">Share code</span>

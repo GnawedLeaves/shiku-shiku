@@ -1,21 +1,21 @@
-// Preset palette offered when tagging a group with a colour. Users can also
-// pick any custom colour via a native color input -- these are just sensible
-// defaults with good contrast against both light and dark badge text.
+// Preset palette offered when tagging a group with a colour. These are the
+// four paint colours of the design system -- identity blocks, not statuses.
+// Users can still pick any custom colour via a native color input.
 
 export const GROUP_COLOR_PRESETS = [
-  { name: "Red", value: "#ef4444" },
-  { name: "Orange", value: "#f97316" },
-  { name: "Amber", value: "#f59e0b" },
-  { name: "Yellow", value: "#eab308" },
-  { name: "Lime", value: "#84cc16" },
-  { name: "Green", value: "#22c55e" },
-  { name: "Teal", value: "#14b8a6" },
-  { name: "Cyan", value: "#06b6d4" },
-  { name: "Blue", value: "#3b82f6" },
-  { name: "Indigo", value: "#6366f1" },
-  { name: "Violet", value: "#8b5cf6" },
-  { name: "Pink", value: "#ec4899" },
+  { name: "Green", value: "#027b49" },
+  { name: "Pink", value: "#f19ec8" },
+  { name: "Yellow", value: "#fbb833" },
+  { name: "Red", value: "#fa4d43" },
+  { name: "Iron", value: "#1f1f1f" },
 ] as const;
+
+/** Stable paint colour for an entity with no colour of its own (e.g. a set). */
+export function paintColorFor(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  return GROUP_COLOR_PRESETS[Math.abs(hash) % 4].value;
+}
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -30,5 +30,5 @@ export function readableTextColor(hex: string): string {
   const b = parseInt(hex.slice(5, 7), 16);
   // Standard relative-luminance approximation.
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.6 ? "#1f2937" : "#ffffff";
+  return luminance > 0.6 ? "#1f1f1f" : "#ffffff";
 }

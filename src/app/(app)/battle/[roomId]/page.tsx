@@ -48,7 +48,7 @@ export default async function BattleRoomPage({
         <p className="text-sm opacity-60">Status: {room.status}</p>
       </div>
 
-      <div className="card bg-base-100 shadow-sm">
+      <div className="card bg-base-100">
         <div className="card-body p-4 gap-2">
           <h2 className="font-semibold text-sm">Invite</h2>
           <p className="text-xs opacity-60">Share this code, or the link below.</p>
@@ -57,7 +57,7 @@ export default async function BattleRoomPage({
         </div>
       </div>
 
-      <div className="card bg-base-100 shadow-sm">
+      <div className="card bg-base-100">
         <div className="card-body p-4 gap-2">
           <h2 className="font-semibold text-sm">Players ({members?.length ?? 0})</h2>
           {(members ?? []).map((member) => {

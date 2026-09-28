@@ -26,7 +26,7 @@ export default async function EditCardPage({
       <BackButton href={`/sets/${setId}`} />
       <h1 className="text-xl font-bold">Edit card</h1>
 
-      <form action={updateCard.bind(null, setId, cardId)} className="card bg-base-100 shadow-sm">
+      <form action={updateCard.bind(null, setId, cardId)} className="card bg-base-100">
         <div className="card-body gap-3">
           <CardFields
             groups={groups ?? []}

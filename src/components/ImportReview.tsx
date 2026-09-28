@@ -150,7 +150,7 @@ export default function ImportReview({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="card bg-base-100 shadow-sm">
+      <div className="card bg-base-100">
         <div className="card-body p-4 gap-3">
           <label className="form-control">
             <span className="label-text mb-1">Sheet layout</span>
@@ -202,7 +202,7 @@ export default function ImportReview({
       </div>
 
       {rows.length > 0 && (
-        <div className="card bg-base-100 shadow-sm">
+        <div className="card bg-base-100">
           <div className="card-body p-4 gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-semibold text-sm">Review before saving</h3>

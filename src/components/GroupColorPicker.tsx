@@ -19,7 +19,7 @@ export default function GroupColorPicker({ defaultColor }: { defaultColor?: stri
           title="No color"
           onClick={() => setColor("")}
           className={`h-6 w-6 rounded-full border-2 grid place-items-center text-xs ${
-            color === "" ? "border-primary" : "border-base-300"
+            color === "" ? "border-iron" : "border-base-300"
           }`}
         >
           ×
@@ -31,8 +31,8 @@ export default function GroupColorPicker({ defaultColor }: { defaultColor?: stri
             title={preset.name}
             aria-label={preset.name}
             onClick={() => setColor(preset.value)}
-            className={`h-6 w-6 rounded-full border-2 ${
-              color === preset.value ? "border-primary" : "border-transparent"
+            className={`h-6 w-6 rounded-full ${
+              color === preset.value ? "ring-2 ring-iron ring-offset-2 ring-offset-concrete" : ""
             }`}
             style={{ backgroundColor: preset.value }}
           />

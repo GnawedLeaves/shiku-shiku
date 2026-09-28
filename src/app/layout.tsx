@@ -1,15 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Archivo_Narrow } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Stand-in for KH Teka (commercial): a condensed grotesk that holds up at
+// crushed line-heights and negative tracking.
+const teka = Archivo_Narrow({
+  variable: "--font-teka",
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: "400",
 });
 
 export const metadata: Metadata = {
@@ -28,7 +26,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#6d28d9",
+  themeColor: "#d9d9d9",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -39,7 +37,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       data-theme="shikushiku"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${teka.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

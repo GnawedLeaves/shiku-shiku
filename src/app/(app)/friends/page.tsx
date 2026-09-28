@@ -56,7 +56,7 @@ export default async function FriendsPage() {
       <FriendSearch />
 
       {incoming.length > 0 && (
-        <section className="card bg-base-100 shadow-sm">
+        <section className="card bg-base-100">
           <div className="card-body p-4 gap-3">
             <h2 className="font-semibold text-sm">
               Requests received <span className="badge badge-primary badge-sm">{incoming.length}</span>
@@ -87,7 +87,7 @@ export default async function FriendsPage() {
         </section>
       )}
 
-      <section className="card bg-base-100 shadow-sm">
+      <section className="card bg-base-100">
         <div className="card-body p-4 gap-3">
           <h2 className="font-semibold text-sm">Your friends ({friends.length})</h2>
           {friends.length === 0 && (
@@ -118,7 +118,7 @@ export default async function FriendsPage() {
       </section>
 
       {outgoing.length > 0 && (
-        <section className="card bg-base-100 shadow-sm">
+        <section className="card bg-base-100">
           <div className="card-body p-4 gap-3">
             <h2 className="font-semibold text-sm">Requests sent ({outgoing.length})</h2>
             {outgoing.map((row) => {

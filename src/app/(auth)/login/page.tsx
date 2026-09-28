@@ -9,11 +9,28 @@ export default async function LoginPage({
   const params = await searchParams;
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-base-200 p-4">
-      <div className="card w-full max-w-sm bg-base-100 shadow-xl">
-        <div className="card-body">
-          <h1 className="text-2xl font-bold text-center">しく Shiku Shiku</h1>
-          <p className="text-center text-sm opacity-70 mb-2">Log in to keep your progress</p>
+    <main className="min-h-screen flex flex-col w-full max-w-[1440px] mx-auto">
+      <header className="flex items-center justify-between gap-4 px-4 py-4 sm:px-6">
+        <span className="text-subheading whitespace-nowrap">しく SHIKU</span>
+        <div className="flex items-center gap-2">
+          <span className="text-body-sm text-right">No account?</span>
+          <Link href="/signup" className="btn btn-primary btn-sm">
+            Sign up
+          </Link>
+        </div>
+      </header>
+
+      <h1 aria-label="Shiku Shiku" className="display px-3 pt-10 pb-6 sm:px-5 overflow-hidden">
+        Shiku
+        <br />
+        Shiku
+      </h1>
+
+      <hr className="hairline" />
+
+      <div className="w-full max-w-sm px-4 py-8 sm:px-6">
+        <div className="flex flex-col gap-3">
+          <p className="text-subheading mb-2">Log in to keep your progress</p>
 
           {params.error && <div className="alert alert-error text-sm py-2">{params.error}</div>}
 
@@ -38,20 +55,13 @@ export default async function LoginPage({
             </button>
           </form>
 
-          <div className="divider text-xs">OR</div>
+          <div className="divider text-xs">or</div>
 
           <form action={signInWithGoogle}>
             <button type="submit" className="btn btn-outline w-full">
               Continue with Google
             </button>
           </form>
-
-          <p className="text-center text-sm mt-4">
-            No account?{" "}
-            <Link href="/signup" className="link link-primary">
-              Sign up
-            </Link>
-          </p>
         </div>
       </div>
     </main>
