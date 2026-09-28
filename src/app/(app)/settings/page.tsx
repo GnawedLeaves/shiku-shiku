@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { updateAnswerDisplayMode, updatePdfTemplate } from "@/lib/actions/settings";
 import { isDocumentAiConfigured } from "@/lib/pdf/documentAi";
 import { DEFAULT_TEMPLATE_ID, PDF_TEMPLATES } from "@/lib/pdf/templates";
 import SubmitButton from "@/components/ui/SubmitButton";
+import LinkButton from "@/components/ui/LinkButton";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -99,12 +99,12 @@ export default async function SettingsPage() {
           <h2 className="font-semibold text-sm">Account</h2>
           <p className="text-sm opacity-70">{user?.email}</p>
           <div className="flex gap-2 mt-1">
-            <Link href="/profile" className="btn btn-outline btn-sm">
+            <LinkButton href="/profile" className="btn btn-outline btn-sm">
               Edit profile
-            </Link>
-            <Link href="/battle" className="btn btn-outline btn-sm">
+            </LinkButton>
+            <LinkButton href="/battle" className="btn btn-outline btn-sm">
               Battles
-            </Link>
+            </LinkButton>
           </div>
         </div>
       </div>

@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deleteSession } from "@/lib/actions/sessions";
+import LinkButton from "@/components/ui/LinkButton";
 
 interface SessionRow {
   id: string;
@@ -16,6 +16,7 @@ interface SessionRow {
 export default function SessionsList({ sessions }: { sessions: SessionRow[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   if (sessions.length === 0) {
     return <p className="text-sm opacity-60">No sessions in progress.</p>;
@@ -23,6 +24,7 @@ export default function SessionsList({ sessions }: { sessions: SessionRow[] }) {
 
   function handleDelete(id: string) {
     if (!confirm("Delete this session? Progress within it will be lost.")) return;
+    setDeletingId(id);
     startTransition(async () => {
       await deleteSession(id);
       router.refresh();
@@ -43,14 +45,15 @@ export default function SessionsList({ sessions }: { sessions: SessionRow[] }) {
             </p>
           </div>
           <div className="flex gap-1">
-            <Link href={`/study/${s.id}`} className="btn btn-primary btn-xs">
+            <LinkButton href={`/study/${s.id}`} className="btn btn-primary btn-xs">
               {s.status === "paused" ? "Resume" : "Continue"}
-            </Link>
+            </LinkButton>
             <button
               className="btn btn-ghost btn-xs text-error"
               disabled={isPending}
               onClick={() => handleDelete(s.id)}
             >
+              {isPending && deletingId === s.id && <span className="loading loading-spinner loading-xs" />}
               Delete
             </button>
           </div>

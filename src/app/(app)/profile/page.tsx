@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { removeAvatar, updateProfile, uploadAvatar } from "@/lib/actions/profile";
 import Avatar from "@/components/Avatar";
 import SubmitButton from "@/components/ui/SubmitButton";
 import BackButton from "@/components/ui/BackButton";
+import LinkButton from "@/components/ui/LinkButton";
 
 export default async function ProfilePage({
   searchParams,
@@ -127,12 +127,12 @@ export default async function ProfilePage({
       </div>
 
       <div className="flex gap-2">
-        <Link href="/friends" className="btn btn-outline btn-sm">
+        <LinkButton href="/friends" className="btn btn-outline btn-sm">
           Friends
-        </Link>
-        <Link href="/history" className="btn btn-outline btn-sm">
+        </LinkButton>
+        <LinkButton href="/history" className="btn btn-outline btn-sm">
           Study history
-        </Link>
+        </LinkButton>
       </div>
     </div>
   );

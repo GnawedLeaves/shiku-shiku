@@ -1,5 +1,6 @@
-import Link from "next/link";
 import { signUpWithPassword, signInWithGoogle } from "@/lib/actions/auth";
+import SubmitButton from "@/components/ui/SubmitButton";
+import LinkButton from "@/components/ui/LinkButton";
 
 export default async function SignupPage({
   searchParams,
@@ -14,9 +15,9 @@ export default async function SignupPage({
         <span className="text-subheading whitespace-nowrap">しく SHIKU</span>
         <div className="flex items-center gap-2">
           <span className="text-body-sm text-right">Have an account?</span>
-          <Link href="/login" className="btn btn-primary btn-sm">
+          <LinkButton href="/login" className="btn btn-primary btn-sm">
             Log in
-          </Link>
+          </LinkButton>
         </div>
       </header>
 
@@ -53,17 +54,17 @@ export default async function SignupPage({
                 className="input input-bordered w-full"
               />
             </label>
-            <button type="submit" className="btn btn-primary mt-2">
+            <SubmitButton className="btn btn-primary mt-2" pendingText="Creating account…">
               Sign up
-            </button>
+            </SubmitButton>
           </form>
 
           <div className="divider text-xs">or</div>
 
           <form action={signInWithGoogle}>
-            <button type="submit" className="btn btn-outline w-full">
+            <SubmitButton className="btn btn-outline w-full" pendingText="Opening Google…">
               Continue with Google
-            </button>
+            </SubmitButton>
           </form>
         </div>
       </div>

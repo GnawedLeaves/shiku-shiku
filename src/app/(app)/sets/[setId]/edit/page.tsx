@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { updateSet } from "@/lib/actions/sets";
 import BackButton from "@/components/ui/BackButton";
 import GroupColorPicker from "@/components/GroupColorPicker";
+import SubmitButton from "@/components/ui/SubmitButton";
 
 export default async function EditSetPage({ params }: { params: Promise<{ setId: string }> }) {
   const { setId } = await params;
@@ -43,9 +44,9 @@ export default async function EditSetPage({ params }: { params: Promise<{ setId:
               × picks a colour automatically. + lets you choose any colour.
             </span>
           </div>
-          <button type="submit" className="btn btn-primary mt-2">
+          <SubmitButton className="btn btn-primary mt-2" pendingText="Saving…">
             Save
-          </button>
+          </SubmitButton>
         </div>
       </form>
     </div>

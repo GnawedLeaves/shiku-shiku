@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { paintColorFor, readableTextColor } from "@/lib/study/groupColors";
+import LinkButton from "@/components/ui/LinkButton";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -20,9 +21,9 @@ export default async function DashboardPage() {
         <h1>Your sets</h1>
         <div className="flex items-center gap-2">
           <span className="text-body-sm hidden sm:inline">Something new?</span>
-          <Link href="/sets/new" className="btn btn-primary btn-sm">
+          <LinkButton href="/sets/new" className="btn btn-primary btn-sm">
             New set
-          </Link>
+          </LinkButton>
         </div>
       </div>
 
@@ -63,9 +64,9 @@ export default async function DashboardPage() {
 
       <div className="flex items-center gap-2">
         <span className="text-body-sm">Got a share code?</span>
-        <Link href="/share" className="btn btn-primary btn-sm">
+        <LinkButton href="/share" className="btn btn-primary btn-sm">
           Import a set
-        </Link>
+        </LinkButton>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { createSet } from "@/lib/actions/sets";
 import BackButton from "@/components/ui/BackButton";
+import SubmitButton from "@/components/ui/SubmitButton";
 
 export default async function NewSetPage({
   searchParams,
@@ -25,9 +26,9 @@ export default async function NewSetPage({
             <span className="label-text mb-1">Description (optional)</span>
             <textarea name="description" className="textarea textarea-bordered w-full" rows={3} />
           </label>
-          <button type="submit" className="btn btn-primary mt-2">
+          <SubmitButton className="btn btn-primary mt-2" pendingText="Creating…">
             Create set
-          </button>
+          </SubmitButton>
         </div>
       </form>
     </div>

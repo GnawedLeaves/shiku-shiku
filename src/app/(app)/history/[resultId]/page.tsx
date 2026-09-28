@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { SessionResultDetail } from "@/lib/supabase/database.types";
 import BackButton from "@/components/ui/BackButton";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { restartFromResult } from "@/lib/actions/sessions";
+import LinkButton from "@/components/ui/LinkButton";
 
 export default async function HistoryDetailPage({
   params,
@@ -96,12 +96,12 @@ export default async function HistoryDetailPage({
           </form>
         )}
         {result.set_id && (
-          <Link
+          <LinkButton
             href={`/study/new?set=${result.set_id}`}
             className="btn btn-outline btn-sm self-start"
           >
             Study this set again
-          </Link>
+          </LinkButton>
         )}
       </div>
     </div>

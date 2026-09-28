@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createSession } from "@/lib/actions/sessions";
+import SubmitButton from "@/components/ui/SubmitButton";
 
 interface SetOption {
   id: string;
@@ -174,9 +175,9 @@ export default function StudySessionForm({
           <input name="name" className="input input-bordered w-full" placeholder="Evening review" />
         </label>
 
-        <button type="submit" className="btn btn-primary mt-2">
+        <SubmitButton className="btn btn-primary mt-2" pendingText="Starting session…">
           Start session
-        </button>
+        </SubmitButton>
       </div>
     </form>
   );

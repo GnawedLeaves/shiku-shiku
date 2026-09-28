@@ -1,5 +1,6 @@
 import { importSharedSet } from "@/lib/actions/sets";
 import BackButton from "@/components/ui/BackButton";
+import SubmitButton from "@/components/ui/SubmitButton";
 
 export default async function ShareImportPage({
   searchParams,
@@ -33,9 +34,9 @@ export default async function ShareImportPage({
               placeholder="e.g. K7MP4QXA"
             />
           </label>
-          <button type="submit" className="btn btn-primary mt-2">
+          <SubmitButton className="btn btn-primary mt-2" pendingText="Importing…">
             Import set
-          </button>
+          </SubmitButton>
         </div>
       </form>
     </div>

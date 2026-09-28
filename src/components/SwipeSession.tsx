@@ -1,13 +1,13 @@
 "use client";
 
 import { useOptimistic, useRef, useState, startTransition } from "react";
-import Link from "next/link";
 import { motion, type PanInfo } from "framer-motion";
 import { recordSwipe, pauseSession, restartSession } from "@/lib/actions/sessions";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { formatAnswer } from "@/lib/study/formatAnswer";
 import { computeScore } from "@/lib/study/score";
 import type { AnswerDisplayMode, QueueEntry } from "@/lib/supabase/database.types";
+import LinkButton from "@/components/ui/LinkButton";
 
 interface CardData {
   id: string;
@@ -148,12 +148,12 @@ export default function SwipeSession({
           </SubmitButton>
         </form>
         <div className="flex flex-wrap gap-2">
-          <Link href="/history" className="btn btn-outline">
+          <LinkButton href="/history" className="btn btn-outline">
             See history
-          </Link>
-          <Link href="/study/new" className="btn btn-outline">
+          </LinkButton>
+          <LinkButton href="/study/new" className="btn btn-outline">
             Back to study
-          </Link>
+          </LinkButton>
         </div>
       </div>
     );
@@ -179,7 +179,9 @@ export default function SwipeSession({
           {progress.position} / {progress.total}
         </p>
         <form action={pauseSession.bind(null, sessionId)}>
-          <button className="btn btn-ghost btn-xs">Pause &amp; exit</button>
+          <SubmitButton className="btn btn-ghost btn-xs" pendingText="Pausing…">
+            Pause &amp; exit
+          </SubmitButton>
         </form>
       </div>
 

@@ -1,5 +1,6 @@
 import { importSharedSet } from "@/lib/actions/sets";
 import BackButton from "@/components/ui/BackButton";
+import SubmitButton from "@/components/ui/SubmitButton";
 
 export default async function ShareLinkPage({
   params,
@@ -28,9 +29,9 @@ export default async function ShareLinkPage({
             Share code: <span className="font-mono font-semibold">{code}</span>
           </p>
           <input type="hidden" name="code" value={code} />
-          <button type="submit" className="btn btn-primary">
+          <SubmitButton className="btn btn-primary" pendingText="Importing…">
             Import into my library
-          </button>
+          </SubmitButton>
         </div>
       </form>
     </div>

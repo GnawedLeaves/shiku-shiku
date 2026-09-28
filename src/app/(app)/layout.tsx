@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/lib/actions/auth";
 import BottomNav from "@/components/BottomNav";
+import SubmitButton from "@/components/ui/SubmitButton";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -22,7 +23,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             しく SHIKU
           </Link>
           <form action={signOut}>
-            <button className="btn btn-primary btn-sm">Log out</button>
+            <SubmitButton className="btn btn-primary btn-sm" pendingText="Logging out…">
+              Log out
+            </SubmitButton>
           </form>
         </div>
       </header>

@@ -20,6 +20,7 @@ export default function FriendSearch() {
   const [message, setMessage] = useState<string | null>(null);
   const [isSearching, startSearch] = useTransition();
   const [isSending, startSend] = useTransition();
+  const [sendingTo, setSendingTo] = useState<string | null>(null);
 
   function handleSearch(event: React.FormEvent) {
     event.preventDefault();
@@ -32,6 +33,7 @@ export default function FriendSearch() {
 
   function handleAdd(userId: string) {
     setMessage(null);
+    setSendingTo(userId);
     startSend(async () => {
       const result = await sendFriendRequest(userId);
       if (result && "error" in result && result.error) setMessage(result.error);
@@ -80,6 +82,9 @@ export default function FriendSearch() {
                 disabled={isSending}
                 onClick={() => handleAdd(person.id)}
               >
+                {isSending && sendingTo === person.id && (
+                  <span className="loading loading-spinner loading-xs" />
+                )}
                 Add friend
               </button>
             </div>

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { deleteSet, generateShareCode, revokeShareCode } from "@/lib/actions/sets";
@@ -10,6 +9,7 @@ import GroupColorPicker from "@/components/GroupColorPicker";
 import BackButton from "@/components/ui/BackButton";
 import { getSiteUrl } from "@/lib/siteUrl";
 import CopyField from "@/components/CopyField";
+import LinkButton from "@/components/ui/LinkButton";
 
 export default async function SetDetailPage({
   params,
@@ -66,13 +66,14 @@ export default async function SetDetailPage({
           {set.description && <p className="text-sm opacity-70">{set.description}</p>}
         </div>
         <div className="flex gap-1">
-          <Link href={`/sets/${setId}/edit`} className="btn btn-ghost btn-xs">
+          <LinkButton href={`/sets/${setId}/edit`} className="btn btn-ghost btn-xs">
             Edit
-          </Link>
+          </LinkButton>
           <form action={deleteSet.bind(null, setId)}>
             <ConfirmSubmitButton
               confirmText="Delete this set and all its cards?"
               className="btn btn-ghost btn-xs text-error"
+              pendingText="Deleting…"
             >
               Delete
             </ConfirmSubmitButton>
@@ -81,18 +82,18 @@ export default async function SetDetailPage({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Link href={`/study/new?set=${setId}`} className="btn btn-primary btn-sm">
+        <LinkButton href={`/study/new?set=${setId}`} className="btn btn-primary btn-sm">
           Start studying
-        </Link>
-        <Link href={`/sets/${setId}/cards/new`} className="btn btn-outline btn-sm">
+        </LinkButton>
+        <LinkButton href={`/sets/${setId}/cards/new`} className="btn btn-outline btn-sm">
           + Add card
-        </Link>
-        <Link href={`/sets/${setId}/import`} className="btn btn-outline btn-sm">
+        </LinkButton>
+        <LinkButton href={`/sets/${setId}/import`} className="btn btn-outline btn-sm">
           Import from PDF
-        </Link>
-        <Link href={`/sets/${setId}/scoreboard`} className="btn btn-outline btn-sm">
+        </LinkButton>
+        <LinkButton href={`/sets/${setId}/scoreboard`} className="btn btn-outline btn-sm">
           Scoreboard
-        </Link>
+        </LinkButton>
       </div>
 
       <div className="flex flex-col">
@@ -149,6 +150,7 @@ export default async function SetDetailPage({
                 <ConfirmSubmitButton
                   confirmText="Delete this group? Cards stay, but lose this tag."
                   className="btn btn-ghost btn-xs text-error"
+                  pendingText="Deleting…"
                 >
                   Delete
                 </ConfirmSubmitButton>

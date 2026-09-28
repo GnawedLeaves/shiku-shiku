@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { deleteCard, deleteCards } from "@/lib/actions/cards";
 import { copyCardsIntoSet } from "@/lib/actions/sets";
 import {
@@ -14,6 +13,7 @@ import { formatAnswer } from "@/lib/study/formatAnswer";
 import { GROUP_COLOR_PRESETS } from "@/lib/study/groupColors";
 import GroupBadge from "@/components/GroupBadge";
 import type { AnswerDisplayMode } from "@/lib/supabase/database.types";
+import LinkButton from "@/components/ui/LinkButton";
 
 interface CardRow {
   id: string;
@@ -62,6 +62,10 @@ export default function CardsList({
   const [targetSetId, setTargetSetId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Which button started the running action, so only that one shows a spinner
+  // (the rest are just disabled until it finishes).
+  const [activeAction, setActiveAction] = useState<string | null>(null);
+  const isRunning = (action: string) => isPending && activeAction === action;
 
   const groupNames = useMemo(
     () => Object.fromEntries(groups.map((group) => [group.id, group.name])),
@@ -103,8 +107,9 @@ export default function CardsList({
     });
   }
 
-  function run(work: () => Promise<unknown>) {
+  function run(action: string, work: () => Promise<unknown>) {
     setError(null);
+    setActiveAction(action);
     startTransition(async () => {
       try {
         await work();
@@ -117,7 +122,7 @@ export default function CardsList({
 
   function handleDelete(cardId: string) {
     if (!confirm("Delete this card?")) return;
-    run(async () => {
+    run(`delete:${cardId}`, async () => {
       await deleteCard(setId, cardId);
       setSelected((prev) => {
         const next = new Set(prev);
@@ -145,7 +150,7 @@ export default function CardsList({
 
   function handleSaveGroups(changes: GroupChanges) {
     if (selectedIds.length === 0) return;
-    run(async () => {
+    run("save-groups", async () => {
       await updateCardGroups(setId, selectedIds, changes.add, changes.remove);
       setIsTagOpen(false);
       setSelected(new Set());
@@ -153,7 +158,7 @@ export default function CardsList({
   }
 
   function handleCreateGroup(name: string, color: string | null, changes: GroupChanges) {
-    run(async () => {
+    run("create-group", async () => {
       // Keep any ticks/unticks made in the dialog before creating the new group.
       if (changes.add.length > 0 || changes.remove.length > 0) {
         await updateCardGroups(setId, selectedIds, changes.add, changes.remove);
@@ -165,7 +170,7 @@ export default function CardsList({
   }
 
   function handleRemoveFromGroup(groupId: string) {
-    run(async () => {
+    run("remove-from-group", async () => {
       await removeCardsFromGroup(setId, selectedIds, groupId);
       setSelected(new Set());
     });
@@ -177,7 +182,7 @@ export default function CardsList({
       `Delete ${selectedIds.length} card${selectedIds.length === 1 ? "" : "s"}? This can't be undone.`
     );
     if (!confirmed) return;
-    run(async () => {
+    run("delete-selected", async () => {
       await deleteCards(setId, selectedIds);
       setSelected(new Set());
     });
@@ -185,7 +190,7 @@ export default function CardsList({
 
   function handleCopy() {
     if (!targetSetId || selectedIds.length === 0) return;
-    run(async () => {
+    run("copy", async () => {
       await copyCardsIntoSet(selectedIds, targetSetId);
       setSelected(new Set());
       setTargetSetId("");
@@ -286,15 +291,16 @@ export default function CardsList({
                   </div>
                 )}
               </div>
-              <Link href={`/sets/${setId}/cards/${card.id}/edit`} className="btn btn-ghost btn-xs">
+              <LinkButton href={`/sets/${setId}/cards/${card.id}/edit`} className="btn btn-ghost btn-xs">
                 Edit
-              </Link>
+              </LinkButton>
               <button
                 type="button"
                 className="btn btn-ghost btn-xs text-error"
                 disabled={isPending}
                 onClick={() => handleDelete(card.id)}
               >
+                {isRunning(`delete:${card.id}`) && <span className="loading loading-spinner loading-xs" />}
                 Delete
               </button>
             </div>
@@ -314,7 +320,6 @@ export default function CardsList({
                 disabled={isPending}
                 onClick={() => setIsTagOpen(true)}
               >
-                {isPending && <span className="loading loading-spinner loading-xs" />}
                 {anySelectedGrouped ? "Manage groups" : "Add to group"}
               </button>
               {filter.kind === "group" && (
@@ -324,6 +329,7 @@ export default function CardsList({
                   disabled={isPending}
                   onClick={() => handleRemoveFromGroup(filter.id)}
                 >
+                  {isRunning("remove-from-group") && <span className="loading loading-spinner loading-xs" />}
                   Remove from {groupNames[filter.id]}
                 </button>
               )}
@@ -333,7 +339,7 @@ export default function CardsList({
                 disabled={isPending}
                 onClick={handleDeleteSelected}
               >
-                {isPending && <span className="loading loading-spinner loading-xs" />}
+                {isRunning("delete-selected") && <span className="loading loading-spinner loading-xs" />}
                 Delete
               </button>
               <button
@@ -365,6 +371,7 @@ export default function CardsList({
                   disabled={isPending || !targetSetId}
                   onClick={handleCopy}
                 >
+                  {isRunning("copy") && <span className="loading loading-spinner loading-xs" />}
                   Copy
                 </button>
               </div>
@@ -379,6 +386,7 @@ export default function CardsList({
           membership={membership}
           selectedCount={selected.size}
           isPending={isPending}
+          pendingAction={isPending ? activeAction : null}
           onClose={() => setIsTagOpen(false)}
           onSave={handleSaveGroups}
           onCreate={handleCreateGroup}
@@ -422,6 +430,7 @@ function TagDialog({
   membership,
   selectedCount,
   isPending,
+  pendingAction,
   onClose,
   onSave,
   onCreate,
@@ -430,6 +439,7 @@ function TagDialog({
   membership: Record<string, Membership>;
   selectedCount: number;
   isPending: boolean;
+  pendingAction: string | null;
   onClose: () => void;
   onSave: (changes: GroupChanges) => void;
   onCreate: (name: string, color: string | null, changes: GroupChanges) => void;
@@ -516,6 +526,7 @@ function TagDialog({
               disabled={isPending || !newGroupName.trim()}
               onClick={() => onCreate(newGroupName, newGroupColor, changes)}
             >
+              {pendingAction === "create-group" && <span className="loading loading-spinner loading-xs" />}
               Create &amp; add
             </button>
           </div>
@@ -546,7 +557,7 @@ function TagDialog({
             disabled={isPending || changeCount === 0}
             onClick={() => onSave(changes)}
           >
-            {isPending && <span className="loading loading-spinner loading-xs" />}
+            {pendingAction === "save-groups" && <span className="loading loading-spinner loading-xs" />}
             Save
           </button>
         </div>
