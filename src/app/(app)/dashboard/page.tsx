@@ -10,7 +10,7 @@ export default async function DashboardPage() {
 
   const { data: sets } = await supabase
     .from("sets")
-    .select("id, name, description, cards(count)")
+    .select("id, name, description, color, cards(count)")
     .eq("owner_id", user!.id)
     .order("created_at", { ascending: false });
 
@@ -34,7 +34,7 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 border-t border-l border-iron">
         {sets?.map((set) => {
-          const paint = paintColorFor(set.id);
+          const paint = set.color ?? paintColorFor(set.id);
           const ink = readableTextColor(paint);
           const count = (set.cards as unknown as { count: number }[])?.[0]?.count ?? 0;
           return (

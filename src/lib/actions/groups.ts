@@ -94,3 +94,42 @@ export async function removeCardsFromGroup(setId: string, cardIds: string[], gro
   await supabase.from("card_groups").delete().eq("group_id", groupId).in("card_id", cardIds);
   revalidatePath(`/sets/${setId}`);
 }
+
+/**
+ * Applies a batch of group changes to the selected cards in one round trip:
+ * every card is tagged with each group in `addGroupIds` and untagged from each
+ * group in `removeGroupIds`. Groups in neither list are left untouched, so a
+ * group only some of the cards were in keeps exactly those cards.
+ */
+export async function updateCardGroups(
+  setId: string,
+  cardIds: string[],
+  addGroupIds: string[],
+  removeGroupIds: string[]
+) {
+  if (cardIds.length === 0) return;
+
+  const supabase = await createClient();
+
+  if (addGroupIds.length > 0) {
+    const links = cardIds.flatMap((cardId) =>
+      addGroupIds.map((groupId) => ({ card_id: cardId, group_id: groupId }))
+    );
+    const { error } = await supabase.from("card_groups").upsert(links, {
+      onConflict: "card_id,group_id",
+      ignoreDuplicates: true,
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  if (removeGroupIds.length > 0) {
+    const { error } = await supabase
+      .from("card_groups")
+      .delete()
+      .in("group_id", removeGroupIds)
+      .in("card_id", cardIds);
+    if (error) throw new Error(error.message);
+  }
+
+  revalidatePath(`/sets/${setId}`);
+}

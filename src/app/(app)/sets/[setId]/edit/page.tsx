@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { updateSet } from "@/lib/actions/sets";
 import BackButton from "@/components/ui/BackButton";
+import GroupColorPicker from "@/components/GroupColorPicker";
 
 export default async function EditSetPage({ params }: { params: Promise<{ setId: string }> }) {
   const { setId } = await params;
@@ -35,6 +36,13 @@ export default async function EditSetPage({ params }: { params: Promise<{ setId:
               rows={3}
             />
           </label>
+          <div className="form-control my-3">
+            <span className="label-text mb-3 block">Colour on the home page</span>
+            <GroupColorPicker defaultColor={set.color} noneLabel="Automatic" size="lg" />
+            <span className="text-xs opacity-60 mt-3 block">
+              × picks a colour automatically. + lets you choose any colour.
+            </span>
+          </div>
           <button type="submit" className="btn btn-primary mt-2">
             Save
           </button>

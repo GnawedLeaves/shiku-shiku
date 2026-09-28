@@ -108,6 +108,9 @@ h1 {
   font-size: clamp(44px, 12vw, 60px);
   line-height: 0.8;
   letter-spacing: -0.03em;
+  /* The crushed line-height lets descenders hang below the box; reserve room
+     so they don't collide with whatever follows the title. */
+  padding-bottom: 0.12em;
 }
 
 h2,
@@ -150,7 +153,9 @@ h3.text-sm,
 .alert,
 .stats,
 .collapse {
-  background: transparent;
+  /* Opaque concrete, not transparent: sticky cards (e.g. the card-selection
+     action bar) must hide the content scrolling underneath them. */
+  background: var(--color-concrete);
   border: 1px solid var(--color-iron);
   border-radius: 0;
 }
@@ -214,13 +219,31 @@ a.card:hover {
   border-radius: 100px;
 }
 
+/* Solid, not transparent: a select's option popup inherits its background, so a
+   transparent field would show the page through the open list. `background-color`
+   (not the `background` shorthand) keeps daisyUI's chevron image intact. */
 .input,
 .select,
 .textarea,
 .file-input {
-  background: transparent;
+  background-color: var(--color-concrete);
   border-color: var(--color-iron);
   border-radius: 0;
+}
+
+.select::picker(select),
+.select select::picker(select) {
+  background-color: var(--color-concrete);
+  color: var(--color-iron);
+  border: 1px solid var(--color-iron);
+  border-radius: 0;
+}
+
+.select option:checked,
+.select option:hover,
+.select option:focus-visible {
+  background-color: var(--color-iron);
+  color: var(--color-concrete);
 }
 
 .input:focus,

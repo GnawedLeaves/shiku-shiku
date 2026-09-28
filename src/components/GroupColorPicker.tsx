@@ -5,10 +5,22 @@ import { GROUP_COLOR_PRESETS } from "@/lib/study/groupColors";
 
 /**
  * A hidden `color` field plus a preset swatch grid and a custom color input.
- * Drop into any `<form>` that already posts a `name` field for a group.
+ * Drop into any `<form>` that should post a `color` (groups, sets). An empty
+ * value means "no colour" -- or, for sets, "pick one automatically".
  */
-export default function GroupColorPicker({ defaultColor }: { defaultColor?: string | null }) {
+export default function GroupColorPicker({
+  defaultColor,
+  noneLabel = "No color",
+  size = "sm",
+}: {
+  defaultColor?: string | null;
+  noneLabel?: string;
+  size?: "sm" | "lg";
+}) {
   const [color, setColor] = useState(defaultColor ?? "");
+  const swatch = size === "lg" ? "h-9 w-9" : "h-6 w-6";
+  const ring = "ring-2 ring-iron ring-offset-2 ring-offset-concrete";
+  const isCustom = color !== "" && !GROUP_COLOR_PRESETS.some((p) => p.value === color);
 
   return (
     <div className="flex flex-col gap-2">
@@ -16,10 +28,11 @@ export default function GroupColorPicker({ defaultColor }: { defaultColor?: stri
       <div className="flex flex-wrap items-center gap-1.5">
         <button
           type="button"
-          title="No color"
+          title={noneLabel}
+          aria-label={noneLabel}
           onClick={() => setColor("")}
-          className={`h-6 w-6 rounded-full border-2 grid place-items-center text-xs ${
-            color === "" ? "border-iron" : "border-base-300"
+          className={`${swatch} rounded-full border-2 border-base-300 grid place-items-center text-xs ${
+            color === "" ? ring : ""
           }`}
         >
           ×
@@ -31,20 +44,21 @@ export default function GroupColorPicker({ defaultColor }: { defaultColor?: stri
             title={preset.name}
             aria-label={preset.name}
             onClick={() => setColor(preset.value)}
-            className={`h-6 w-6 rounded-full ${
-              color === preset.value ? "ring-2 ring-iron ring-offset-2 ring-offset-concrete" : ""
+            className={`${swatch} rounded-full ${
+              color === preset.value ? ring : ""
             }`}
             style={{ backgroundColor: preset.value }}
           />
         ))}
         <label
           title="Custom color"
-          className="relative h-6 w-6 rounded-full border-2 border-base-300 overflow-hidden cursor-pointer grid place-items-center"
-          style={color && !GROUP_COLOR_PRESETS.some((p) => p.value === color) ? { backgroundColor: color } : undefined}
+          aria-label="Custom color"
+          className={`relative ${swatch} rounded-full border-2 border-base-300 overflow-hidden cursor-pointer grid place-items-center ${
+            isCustom ? ring : ""
+          }`}
+          style={isCustom ? { backgroundColor: color } : undefined}
         >
-          {!color || GROUP_COLOR_PRESETS.some((p) => p.value === color) ? (
-            <span className="text-xs">🎨</span>
-          ) : null}
+          {!isCustom && <span className="text-sm leading-none">+</span>}
           <input
             type="color"
             value={color || "#888888"}

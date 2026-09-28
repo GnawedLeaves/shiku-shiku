@@ -3,6 +3,7 @@
 import { randomBytes } from "crypto";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { isValidGroupColor } from "@/lib/study/groupColors";
 import { createClient } from "@/lib/supabase/server";
 
 export async function createSet(formData: FormData) {
@@ -36,11 +37,14 @@ export async function createSet(formData: FormData) {
 export async function updateSet(setId: string, formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
+  // Empty or invalid means "automatic" -- the dashboard picks a paint colour.
+  const rawColor = String(formData.get("color") ?? "").trim();
+  const color = rawColor && isValidGroupColor(rawColor) ? rawColor : null;
 
   const supabase = await createClient();
   await supabase
     .from("sets")
-    .update({ name, description: description || null })
+    .update({ name, description: description || null, color })
     .eq("id", setId);
 
   revalidatePath(`/sets/${setId}`);

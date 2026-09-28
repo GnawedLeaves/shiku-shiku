@@ -1,14 +1,14 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { deleteCard, deleteCards } from "@/lib/actions/cards";
 import { copyCardsIntoSet } from "@/lib/actions/sets";
 import {
-  addCardsToGroups,
   createGroupWithCards,
   removeCardsFromGroup,
+  updateCardGroups,
 } from "@/lib/actions/groups";
 import { formatAnswer } from "@/lib/study/formatAnswer";
 import { GROUP_COLOR_PRESETS } from "@/lib/study/groupColors";
@@ -30,6 +30,15 @@ interface GroupRow {
 }
 
 type Filter = { kind: "all" } | { kind: "ungrouped" } | { kind: "group"; id: string };
+
+/** How many of the selected cards are in a group: all, some, or none of them. */
+type Membership = "all" | "some" | "none";
+
+/** Groups the user changed in the dialog; untouched groups are in neither list. */
+interface GroupChanges {
+  add: string[];
+  remove: string[];
+}
 
 export default function CardsList({
   setId,
@@ -110,17 +119,37 @@ export default function CardsList({
     });
   }
 
-  function handleAddToGroups(groupIds: string[]) {
-    if (selectedIds.length === 0 || groupIds.length === 0) return;
+  // Where the selected cards currently stand in each group, so the dialog can
+  // open with their existing groups already ticked.
+  const membership = useMemo(() => {
+    const selectedCards = cards.filter((card) => selected.has(card.id));
+    return Object.fromEntries(
+      groups.map((group) => {
+        const inGroup = selectedCards.filter((card) => card.groupIds.includes(group.id)).length;
+        const state: Membership =
+          inGroup === 0 ? "none" : inGroup === selectedCards.length ? "all" : "some";
+        return [group.id, state];
+      })
+    ) as Record<string, Membership>;
+  }, [cards, groups, selected]);
+
+  const anySelectedGrouped = Object.values(membership).some((state) => state !== "none");
+
+  function handleSaveGroups(changes: GroupChanges) {
+    if (selectedIds.length === 0) return;
     run(async () => {
-      await addCardsToGroups(setId, selectedIds, groupIds);
+      await updateCardGroups(setId, selectedIds, changes.add, changes.remove);
       setIsTagOpen(false);
       setSelected(new Set());
     });
   }
 
-  function handleCreateGroup(name: string, color: string | null) {
+  function handleCreateGroup(name: string, color: string | null, changes: GroupChanges) {
     run(async () => {
+      // Keep any ticks/unticks made in the dialog before creating the new group.
+      if (changes.add.length > 0 || changes.remove.length > 0) {
+        await updateCardGroups(setId, selectedIds, changes.add, changes.remove);
+      }
       await createGroupWithCards(setId, name, selectedIds, color);
       setIsTagOpen(false);
       setSelected(new Set());
@@ -267,7 +296,7 @@ export default function CardsList({
                 onClick={() => setIsTagOpen(true)}
               >
                 {isPending && <span className="loading loading-spinner loading-xs" />}
-                Add to group
+                {anySelectedGrouped ? "Manage groups" : "Add to group"}
               </button>
               {filter.kind === "group" && (
                 <button
@@ -328,9 +357,11 @@ export default function CardsList({
       {isTagOpen && (
         <TagDialog
           groups={groups}
+          membership={membership}
+          selectedCount={selected.size}
           isPending={isPending}
           onClose={() => setIsTagOpen(false)}
-          onApply={handleAddToGroups}
+          onSave={handleSaveGroups}
           onCreate={handleCreateGroup}
         />
       )}
@@ -369,46 +400,70 @@ function FilterChip({
 
 function TagDialog({
   groups,
+  membership,
+  selectedCount,
   isPending,
   onClose,
-  onApply,
+  onSave,
   onCreate,
 }: {
   groups: GroupRow[];
+  membership: Record<string, Membership>;
+  selectedCount: number;
   isPending: boolean;
   onClose: () => void;
-  onApply: (groupIds: string[]) => void;
-  onCreate: (name: string, color: string | null) => void;
+  onSave: (changes: GroupChanges) => void;
+  onCreate: (name: string, color: string | null, changes: GroupChanges) => void;
 }) {
-  const [picked, setPicked] = useState<Set<string>>(new Set());
+  // Starts as the cards' current membership; the diff against it is what saves.
+  const [draft, setDraft] = useState<Record<string, Membership>>(membership);
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupColor, setNewGroupColor] = useState<string | null>(null);
+
+  const changes: GroupChanges = { add: [], remove: [] };
+  for (const group of groups) {
+    const next = draft[group.id];
+    if (next === membership[group.id]) continue;
+    if (next === "all") changes.add.push(group.id);
+    else if (next === "none") changes.remove.push(group.id);
+  }
+  const changeCount = changes.add.length + changes.remove.length;
+
+  /**
+   * Ticked -> unticked -> ticked. A group only some of the cards are in gets a
+   * third "leave as is" stop, so mixed selections can be restored untouched.
+   */
+  function cycle(groupId: string) {
+    setDraft((prev) => {
+      const current = prev[groupId];
+      const next: Membership =
+        current === "some"
+          ? "all"
+          : current === "all"
+            ? "none"
+            : membership[groupId] === "some"
+              ? "some"
+              : "all";
+      return { ...prev, [groupId]: next };
+    });
+  }
+
+  const cardsLabel = selectedCount === 1 ? "this card" : `these ${selectedCount} cards`;
 
   return (
     <div className="modal modal-open" role="dialog">
       <div className="modal-box">
-        <h3 className="font-bold text-lg">Add to group</h3>
+        <h3 className="font-bold text-lg">Groups</h3>
         <p className="text-sm opacity-60 mb-3">
-          A card can be in several groups — think of them as tags.
+          Tick to add {cardsLabel}, untick to remove. A dash means only some of them are in
+          that group — leave it to keep things as they are.
         </p>
 
         <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
           {groups.length === 0 && <p className="text-sm opacity-60">No groups yet — create one below.</p>}
           {groups.map((group) => (
             <label key={group.id} className="label cursor-pointer justify-start gap-3">
-              <input
-                type="checkbox"
-                className="checkbox checkbox-sm"
-                checked={picked.has(group.id)}
-                onChange={() =>
-                  setPicked((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(group.id)) next.delete(group.id);
-                    else next.add(group.id);
-                    return next;
-                  })
-                }
-              />
+              <TriStateCheckbox state={draft[group.id]} onChange={() => cycle(group.id)} />
               {group.color && (
                 <span
                   className="h-2.5 w-2.5 rounded-full shrink-0"
@@ -417,6 +472,11 @@ function TagDialog({
                 />
               )}
               <span className="label-text">{group.name}</span>
+              {draft[group.id] !== membership[group.id] && (
+                <span className="text-xs opacity-60 ml-auto">
+                  {draft[group.id] === "all" ? "will add" : draft[group.id] === "none" ? "will remove" : ""}
+                </span>
+              )}
             </label>
           ))}
         </div>
@@ -435,7 +495,7 @@ function TagDialog({
               type="button"
               className="btn btn-outline btn-sm"
               disabled={isPending || !newGroupName.trim()}
-              onClick={() => onCreate(newGroupName, newGroupColor)}
+              onClick={() => onCreate(newGroupName, newGroupColor, changes)}
             >
               Create &amp; add
             </button>
@@ -464,15 +524,36 @@ function TagDialog({
           <button
             type="button"
             className="btn btn-primary btn-sm"
-            disabled={isPending || picked.size === 0}
-            onClick={() => onApply(Array.from(picked))}
+            disabled={isPending || changeCount === 0}
+            onClick={() => onSave(changes)}
           >
             {isPending && <span className="loading loading-spinner loading-xs" />}
-            Add to {picked.size || ""} group{picked.size === 1 ? "" : "s"}
+            Save
           </button>
         </div>
       </div>
       <button type="button" className="modal-backdrop" onClick={onClose} aria-label="Close" />
     </div>
+  );
+}
+
+/** A checkbox that can also show a dash, for "some of the selected cards". */
+function TriStateCheckbox({ state, onChange }: { state: Membership; onChange: () => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+
+  // `indeterminate` has no HTML attribute; it can only be set as a DOM property.
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = state === "some";
+  }, [state]);
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      className="checkbox checkbox-sm"
+      checked={state === "all"}
+      aria-checked={state === "some" ? "mixed" : state === "all"}
+      onChange={onChange}
+    />
   );
 }

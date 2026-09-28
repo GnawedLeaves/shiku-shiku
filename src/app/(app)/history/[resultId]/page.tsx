@@ -26,6 +26,11 @@ export default async function HistoryDetailPage({
 
   if (!result) notFound();
 
+  const { data: session } = result.session_id
+    ? await supabase.from("study_sessions").select("name").eq("id", result.session_id).maybeSingle()
+    : { data: null };
+  const setName = result.set_name ?? "Deleted set";
+
   const details = (result.details ?? []) as SessionResultDetail[];
   const correct = details.filter((detail) => detail.result === "correct");
   const incorrect = details.filter((detail) => detail.result !== "correct");
@@ -33,8 +38,10 @@ export default async function HistoryDetailPage({
   return (
     <div className="flex flex-col gap-4">
       <BackButton href="/history" label="History" />
-      <div>
-        <h1 className="text-xl font-bold">{result.set_name ?? "Deleted set"}</h1>
+      {/* Session name > set name > date. Unnamed sessions use the set name as the title. */}
+      <div className="flex flex-col gap-2">
+        <h1 className="text-xl font-bold break-words">{session?.name || setName}</h1>
+        {session?.name && <p className="text-subheading opacity-70 break-words">{setName}</p>}
         <p className="text-sm opacity-60">
           {new Date(result.completed_at).toLocaleString(undefined, {
             dateStyle: "full",
@@ -70,10 +77,15 @@ export default async function HistoryDetailPage({
       {incorrect.length > 0 && (
         <DetailSection title="Got these wrong" tone="error" items={incorrect} />
       )}
-      {correct.length > 0 && <DetailSection title="Got these right" tone="success" items={correct} />}
+      {correct.length > 0 && (
+        <DetailSection title="Got these right" tone="success" items={correct} />
+      )}
 
       {result.set_id && (
-        <Link href={`/study/new?set=${result.set_id}`} className="btn btn-primary btn-sm self-start">
+        <Link
+          href={`/study/new?set=${result.set_id}`}
+          className="btn btn-primary btn-sm self-start"
+        >
           Study this set again
         </Link>
       )}

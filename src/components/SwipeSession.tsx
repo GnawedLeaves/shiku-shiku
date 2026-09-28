@@ -3,7 +3,8 @@
 import { useOptimistic, useRef, useState, startTransition } from "react";
 import Link from "next/link";
 import { motion, type PanInfo } from "framer-motion";
-import { recordSwipe, pauseSession } from "@/lib/actions/sessions";
+import { recordSwipe, pauseSession, restartSession } from "@/lib/actions/sessions";
+import SubmitButton from "@/components/ui/SubmitButton";
 import { formatAnswer } from "@/lib/study/formatAnswer";
 import { computeScore } from "@/lib/study/score";
 import type { AnswerDisplayMode, QueueEntry } from "@/lib/supabase/database.types";
@@ -42,6 +43,23 @@ function applyGrade(state: SessionState, cardId: string, result: Result): Sessio
       : Object.values(entry.statuses).every((status) => status !== "pending"));
 
   return { queue, currentIndex: resolved ? state.currentIndex + 1 : state.currentIndex };
+}
+
+/**
+ * Progress in individual cards rather than queue entries, so a group batch of
+ * eight cards counts as eight steps, not one. `position` is the card the user
+ * is on now (1-based), so the bar reads full on the last card, matching the
+ * "10 / 10" counter.
+ */
+function cardProgress(queue: QueueEntry[]): { position: number; total: number } {
+  let graded = 0;
+  let total = 0;
+  for (const entry of queue) {
+    const statuses = entry.type === "card" ? [entry.status] : Object.values(entry.statuses);
+    total += statuses.length;
+    graded += statuses.filter((status) => status !== "pending").length;
+  }
+  return { position: Math.min(graded + 1, total), total };
 }
 
 export default function SwipeSession({
@@ -109,6 +127,10 @@ export default function SwipeSession({
   }
 
   if (isComplete) {
+    const cardCount = optimistic.queue.reduce(
+      (total, entry) => total + (entry.type === "card" ? 1 : entry.cardIds.length),
+      0
+    );
     return (
       <div className="flex flex-col gap-6 py-8">
         <h1 className="display">Done.</h1>
@@ -119,11 +141,17 @@ export default function SwipeSession({
             {Math.round((score.correct / score.total) * 100)}%
           </p>
         )}
+        <form action={restartSession.bind(null, sessionId)} className="flex items-center gap-2">
+          <span className="text-body-sm">Again?</span>
+          <SubmitButton className="btn btn-primary" pendingText="Restarting…">
+            {cardCount === 1 ? "Restart this card" : `Restart these ${cardCount} cards`}
+          </SubmitButton>
+        </form>
         <div className="flex flex-wrap gap-2">
           <Link href="/history" className="btn btn-outline">
             See history
           </Link>
-          <Link href="/study/new" className="btn btn-primary">
+          <Link href="/study/new" className="btn btn-outline">
             Back to study
           </Link>
         </div>
@@ -134,6 +162,8 @@ export default function SwipeSession({
   if (!currentEntry) {
     return <p>No cards to study.</p>;
   }
+
+  const progress = cardProgress(optimistic.queue);
 
   return (
     // `h-full` lets the card below fill the space between the header and the
@@ -146,7 +176,7 @@ export default function SwipeSession({
 
       <div className="flex items-center justify-between">
         <p className="text-sm opacity-60">
-          {optimistic.currentIndex + 1} / {optimistic.queue.length}
+          {progress.position} / {progress.total}
         </p>
         <form action={pauseSession.bind(null, sessionId)}>
           <button className="btn btn-ghost btn-xs">Pause &amp; exit</button>
@@ -155,8 +185,8 @@ export default function SwipeSession({
 
       <progress
         className="progress progress-primary w-full"
-        value={optimistic.currentIndex}
-        max={optimistic.queue.length}
+        value={progress.position}
+        max={progress.total}
       />
 
       <div className="flex-1 min-h-0 flex flex-col">

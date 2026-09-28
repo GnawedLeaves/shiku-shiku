@@ -8,6 +8,7 @@ import CardsList from "@/components/CardsList";
 import SubmitButton from "@/components/ui/SubmitButton";
 import GroupColorPicker from "@/components/GroupColorPicker";
 import BackButton from "@/components/ui/BackButton";
+import { paintColorFor } from "@/lib/study/groupColors";
 
 export default async function SetDetailPage({
   params,
@@ -58,8 +59,17 @@ export default async function SetDetailPage({
       {error && <div className="alert alert-error text-sm py-2">{error}</div>}
 
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <h1 className="text-xl font-bold">{set.name}</h1>
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            {/* The set's colour on the home page (saved, or the automatic one). */}
+            <span
+              className="h-4 w-4 shrink-0 rounded-full border border-iron"
+              style={{ backgroundColor: set.color ?? paintColorFor(set.id) }}
+              title="Set colour"
+              aria-hidden="true"
+            />
+            <h1 className="text-xl font-bold min-w-0 break-words">{set.name}</h1>
+          </div>
           {set.description && <p className="text-sm opacity-70">{set.description}</p>}
         </div>
         <div className="flex gap-1">
@@ -92,9 +102,8 @@ export default async function SetDetailPage({
         </Link>
       </div>
 
-      <div className="card bg-base-100">
-        <div className="card-body p-4 gap-2">
-          <h3 className="font-semibold text-sm">Share this set</h3>
+      <div className="flex flex-col">
+        <Disclosure title="Share" summary={shareLink ? "Link active" : "Not shared"}>
           {shareLink ? (
             <div className="flex flex-col gap-2">
               <input readOnly value={shareLink} className="input input-bordered input-sm w-full" />
@@ -111,12 +120,14 @@ export default async function SetDetailPage({
               </SubmitButton>
             </form>
           )}
-        </div>
-      </div>
+        </Disclosure>
 
-      <div className="card bg-base-100">
-        <div className="card-body p-4 gap-2">
-          <h3 className="font-semibold text-sm">Groups</h3>
+        <Disclosure
+          title="Groups"
+          summary={
+            groups?.length ? `${groups.length} group${groups.length === 1 ? "" : "s"}` : "None yet"
+          }
+        >
           <p className="text-xs opacity-60">
             Groups work like tags — add cards to them from the list below.
           </p>
@@ -147,7 +158,10 @@ export default async function SetDetailPage({
               </form>
             </div>
           ))}
-          <form action={createGroup.bind(null, setId)} className="flex flex-wrap items-center gap-2 mt-2">
+          <form
+            action={createGroup.bind(null, setId)}
+            className="flex flex-wrap items-center gap-2 mt-2"
+          >
             <input
               name="name"
               required
@@ -159,7 +173,7 @@ export default async function SetDetailPage({
               Add group
             </SubmitButton>
           </form>
-        </div>
+        </Disclosure>
       </div>
 
       <h2 className="font-semibold">Cards</h2>
@@ -171,5 +185,36 @@ export default async function SetDetailPage({
         otherSets={otherSets ?? []}
       />
     </div>
+  );
+}
+
+/**
+ * Collapsed-by-default panel for secondary set tools (sharing, groups), so the
+ * card list stays the focus of the page. Native <details> keeps it
+ * server-rendered, and its open state survives the refresh after a form action.
+ */
+function Disclosure({
+  title,
+  summary,
+  children,
+}: {
+  title: string;
+  summary: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="group border border-iron -mt-px first:mt-0">
+      <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 select-none [&::-webkit-details-marker]:hidden">
+        <span className="text-body-sm">{title}</span>
+        <span className="text-sm opacity-60">{summary}</span>
+        <span
+          className="ml-auto text-lg leading-none transition-transform group-open:rotate-45"
+          aria-hidden="true"
+        >
+          +
+        </span>
+      </summary>
+      <div className="flex flex-col gap-2 border-t border-iron px-4 pt-3 pb-4">{children}</div>
+    </details>
   );
 }

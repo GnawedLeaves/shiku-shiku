@@ -79,6 +79,7 @@ export interface Database {
           owner_id: string;
           name: string;
           description: string | null;
+          color: string | null;
           share_code: string | null;
           origin_set_id: string | null;
           is_public: boolean;
@@ -90,6 +91,7 @@ export interface Database {
           owner_id: string;
           name: string;
           description?: string | null;
+          color?: string | null;
           share_code?: string | null;
           origin_set_id?: string | null;
           is_public?: boolean;
@@ -101,6 +103,7 @@ export interface Database {
           owner_id?: string;
           name?: string;
           description?: string | null;
+          color?: string | null;
           share_code?: string | null;
           origin_set_id?: string | null;
           is_public?: boolean;
