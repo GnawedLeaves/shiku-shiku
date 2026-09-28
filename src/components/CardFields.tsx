@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toRomaji } from "@/lib/japanese/kana";
 import type { JapaneseSuggestion } from "@/lib/japanese/suggest";
+import NewGroupField from "@/components/NewGroupField";
 
 interface GroupOption {
   id: string;
@@ -190,9 +191,9 @@ export default function CardFields({
         />
       </label>
 
-      {groups.length > 0 && (
-        <fieldset className="form-control">
-          <legend className="label-text mb-1">Groups</legend>
+      <fieldset className="form-control flex flex-col gap-2">
+        <legend className="label-text mb-1">Groups</legend>
+        {groups.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {groups.map((group) => (
               <label key={group.id} className="label cursor-pointer gap-2 rounded-field bg-base-200 px-3 py-1">
@@ -214,8 +215,9 @@ export default function CardFields({
               </label>
             ))}
           </div>
-        </fieldset>
-      )}
+        )}
+        <NewGroupField />
+      </fieldset>
     </>
   );
 }

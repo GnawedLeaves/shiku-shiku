@@ -4,6 +4,7 @@ import { useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { bulkCreateCards } from "@/lib/actions/cards";
 import { toRomaji } from "@/lib/japanese/kana";
+import NewGroupField, { type NewGroupDraft } from "@/components/NewGroupField";
 
 interface ReviewRow {
   question: string;
@@ -49,6 +50,7 @@ export default function ImportReview({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [groupIds, setGroupIds] = useState<string[]>([]);
+  const [newGroup, setNewGroup] = useState<NewGroupDraft | null>(null);
 
   const selectedTemplate = templates.find((t) => t.id === templateId);
   const includedCount = rows.filter((row) => row.include).length;
@@ -133,7 +135,8 @@ export default function ImportReview({
       const saved = await bulkCreateCards(
         setId,
         rows.filter((row) => row.include),
-        groupIds
+        groupIds,
+        newGroup
       );
       if (saved === 0) {
         setError("Nothing to save — each card needs a question and an answer.");
@@ -283,9 +286,9 @@ export default function ImportReview({
               </table>
             </div>
 
-            {groups.length > 0 && (
-              <fieldset className="form-control">
-                <legend className="label-text mb-1">Add these cards to groups (optional)</legend>
+            <fieldset className="form-control flex flex-col gap-2">
+              <legend className="label-text mb-1">Add these cards to groups (optional)</legend>
+              {groups.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {groups.map((group) => (
                     <label
@@ -315,8 +318,9 @@ export default function ImportReview({
                     </label>
                   ))}
                 </div>
-              </fieldset>
-            )}
+              )}
+              <NewGroupField onChange={setNewGroup} plural />
+            </fieldset>
 
             <div className="flex gap-2">
               <button type="button" className="btn btn-outline btn-sm" onClick={addRow}>

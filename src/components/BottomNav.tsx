@@ -22,7 +22,7 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-10 border-t border-iron bg-concrete pb-[env(safe-area-inset-bottom)]">
+    <nav className="fixed inset-x-0 bottom-0 z-10 border-t border-iron bg-concrete pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-1 px-2 py-2.5">
         {items.map((item) => {
           const isActive = item.sections.some((section) => inSection(pathname, section));

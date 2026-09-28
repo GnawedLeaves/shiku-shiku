@@ -12,19 +12,29 @@ export default function GroupColorPicker({
   defaultColor,
   noneLabel = "No color",
   size = "sm",
+  fieldName = "color",
+  onChange,
 }: {
   defaultColor?: string | null;
   noneLabel?: string;
   size?: "sm" | "lg";
+  /** Name of the hidden form field that carries the chosen colour. */
+  fieldName?: string;
+  onChange?: (color: string) => void;
 }) {
-  const [color, setColor] = useState(defaultColor ?? "");
+  const [color, setColorState] = useState(defaultColor ?? "");
+
+  function setColor(value: string) {
+    setColorState(value);
+    onChange?.(value);
+  }
   const swatch = size === "lg" ? "h-9 w-9" : "h-6 w-6";
   const ring = "ring-2 ring-iron ring-offset-2 ring-offset-concrete";
   const isCustom = color !== "" && !GROUP_COLOR_PRESETS.some((p) => p.value === color);
 
   return (
     <div className="flex flex-col gap-2">
-      <input type="hidden" name="color" value={color} />
+      <input type="hidden" name={fieldName} value={color} />
       <div className="flex flex-wrap items-center gap-1.5">
         <button
           type="button"

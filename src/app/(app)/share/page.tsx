@@ -21,8 +21,17 @@ export default async function ShareImportPage({
       <form action={importSharedSet} className="card bg-base-100">
         <div className="card-body gap-3">
           <label className="form-control">
-            <span className="label-text mb-1">Share code</span>
-            <input name="code" required className="input input-bordered w-full" placeholder="e.g. aB3xY9" />
+            <span className="label-text mb-1">Share code or link</span>
+            <input
+              name="code"
+              required
+              autoCapitalize="off"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck={false}
+              className="input input-bordered w-full"
+              placeholder="e.g. K7MP4QXA"
+            />
           </label>
           <button type="submit" className="btn btn-primary mt-2">
             Import set

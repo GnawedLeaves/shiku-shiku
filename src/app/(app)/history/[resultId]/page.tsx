@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { SessionResultDetail } from "@/lib/supabase/database.types";
 import BackButton from "@/components/ui/BackButton";
+import SubmitButton from "@/components/ui/SubmitButton";
+import { restartFromResult } from "@/lib/actions/sessions";
 
 export default async function HistoryDetailPage({
   params,
@@ -81,14 +83,27 @@ export default async function HistoryDetailPage({
         <DetailSection title="Got these right" tone="success" items={correct} />
       )}
 
-      {result.set_id && (
-        <Link
-          href={`/study/new?set=${result.set_id}`}
-          className="btn btn-primary btn-sm self-start"
-        >
-          Study this set again
-        </Link>
-      )}
+      <div className="flex flex-col gap-2 border-t border-iron pt-4">
+        {details.length > 0 && (
+          <form
+            action={restartFromResult.bind(null, resultId)}
+            className="flex flex-wrap items-center gap-2"
+          >
+            <span className="text-body-sm">Same words again?</span>
+            <SubmitButton className="btn btn-primary btn-sm" pendingText="Starting…">
+              {details.length === 1 ? "Restart this card" : `Restart these ${details.length} cards`}
+            </SubmitButton>
+          </form>
+        )}
+        {result.set_id && (
+          <Link
+            href={`/study/new?set=${result.set_id}`}
+            className="btn btn-outline btn-sm self-start"
+          >
+            Study this set again
+          </Link>
+        )}
+      </div>
     </div>
   );
 }

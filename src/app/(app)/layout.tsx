@@ -26,7 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </form>
         </div>
       </header>
-      <main className="flex-1 w-full max-w-2xl mx-auto px-4 pt-6 pb-28">{children}</main>
+      <main className="flex-1 w-full max-w-2xl mx-auto px-4 pt-6 pb-[calc(7.5rem+env(safe-area-inset-bottom))]">{children}</main>
       <BottomNav />
     </div>
   );

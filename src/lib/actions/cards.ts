@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
+import { isValidGroupColor } from "@/lib/study/groupColors";
 
 type CardInsert = Database["public"]["Tables"]["cards"]["Insert"];
 
@@ -12,6 +13,35 @@ export interface CardDraft {
   answer_hiragana?: string;
   answer_romaji?: string;
   answer_kanji?: string;
+}
+
+/**
+ * Creates the group typed into the "+ New group" field, if any, and returns
+ * its id so the new card(s) can be added to it. Null when no name was given.
+ */
+async function createGroupIfRequested(
+  setId: string,
+  draft: { name?: string | null; color?: string | null } | null | undefined
+): Promise<string | null> {
+  const name = draft?.name?.trim();
+  if (!name) return null;
+  const color = draft?.color && isValidGroupColor(draft.color) ? draft.color : null;
+
+  const supabase = await createClient();
+  const { data: group, error } = await supabase
+    .from("groups")
+    .insert({ set_id: setId, name, color })
+    .select("id")
+    .single();
+  if (error || !group) throw new Error(error?.message ?? "Could not create group");
+  return group.id;
+}
+
+function newGroupFromForm(formData: FormData) {
+  return {
+    name: String(formData.get("new_group_name") ?? ""),
+    color: String(formData.get("new_group_color") ?? ""),
+  };
 }
 
 async function setCardGroups(cardId: string, groupIds: string[]) {
@@ -55,7 +85,8 @@ export async function createCard(setId: string, formData: FormData) {
     redirect(`/sets/${setId}/cards/new?error=${encodeURIComponent(error?.message ?? "Could not save")}`);
   }
 
-  await setCardGroups(card.id, groupIds);
+  const newGroupId = await createGroupIfRequested(setId, newGroupFromForm(formData));
+  await setCardGroups(card.id, newGroupId ? [...groupIds, newGroupId] : groupIds);
 
   revalidatePath(`/sets/${setId}`);
   redirect(`/sets/${setId}`);
@@ -79,7 +110,8 @@ export async function updateCard(setId: string, cardId: string, formData: FormDa
     })
     .eq("id", cardId);
 
-  await setCardGroups(cardId, groupIds);
+  const newGroupId = await createGroupIfRequested(setId, newGroupFromForm(formData));
+  await setCardGroups(cardId, newGroupId ? [...groupIds, newGroupId] : groupIds);
 
   revalidatePath(`/sets/${setId}`);
   redirect(`/sets/${setId}`);
@@ -103,7 +135,12 @@ export async function deleteCards(setId: string, cardIds: string[]) {
   return cardIds.length;
 }
 
-export async function bulkCreateCards(setId: string, rows: CardDraft[], groupIds: string[] = []) {
+export async function bulkCreateCards(
+  setId: string,
+  rows: CardDraft[],
+  groupIds: string[] = [],
+  newGroup?: { name: string; color: string | null } | null
+) {
   const supabase = await createClient();
 
   const payload: CardInsert[] = rows
@@ -121,9 +158,13 @@ export async function bulkCreateCards(setId: string, rows: CardDraft[], groupIds
   const { data: inserted, error } = await supabase.from("cards").insert(payload).select("id");
   if (error) throw new Error(error.message);
 
-  if (groupIds.length > 0 && inserted) {
+  // Created only once the cards are in, so a failed import leaves no empty group.
+  const newGroupId = await createGroupIfRequested(setId, newGroup);
+  const allGroupIds = newGroupId ? [...groupIds, newGroupId] : groupIds;
+
+  if (allGroupIds.length > 0 && inserted) {
     const links = inserted.flatMap((card) =>
-      groupIds.map((groupId) => ({ card_id: card.id, group_id: groupId }))
+      allGroupIds.map((groupId) => ({ card_id: card.id, group_id: groupId }))
     );
     const { error: linkError } = await supabase.from("card_groups").insert(links);
     if (linkError) throw new Error(linkError.message);

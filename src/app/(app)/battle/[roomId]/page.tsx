@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getSiteUrl } from "@/lib/siteUrl";
 import { deleteBattleRoom, leaveBattleRoom, toggleReady } from "@/lib/actions/battle";
 import Avatar from "@/components/Avatar";
 import SubmitButton from "@/components/ui/SubmitButton";
@@ -38,7 +39,7 @@ export default async function BattleRoomPage({
   const me = (members ?? []).find((member) => member.user_id === user.id);
   const isHost = room.host_id === user.id;
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const siteUrl = await getSiteUrl();
 
   return (
     <div className="flex flex-col gap-4">

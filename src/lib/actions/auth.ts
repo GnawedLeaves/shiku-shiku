@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { getSiteUrl } from "@/lib/siteUrl";
 import { createClient } from "@/lib/supabase/server";
 
 export async function signInWithPassword(formData: FormData) {
@@ -39,7 +40,7 @@ export async function signUpWithPassword(formData: FormData) {
 
 export async function signInWithGoogle() {
   const supabase = await createClient();
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const siteUrl = await getSiteUrl();
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",

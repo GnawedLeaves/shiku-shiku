@@ -36,7 +36,9 @@ export default async function ImportPage({ params }: { params: Promise<{ setId: 
     : DEFAULT_TEMPLATE_ID;
 
   return (
-    <div className="flex flex-col gap-4">
+    // On desktop the review table needs more room than the app's narrow main
+    // column, so this page breaks out of it and centres itself on the viewport.
+    <div className="flex flex-col gap-4 lg:relative lg:left-1/2 lg:w-[min(72rem,calc(100vw-4rem))] lg:-translate-x-1/2">
       <BackButton href={`/sets/${setId}`} />
       <h1 className="text-xl font-bold">Import into {set.name}</h1>
       <ImportReview

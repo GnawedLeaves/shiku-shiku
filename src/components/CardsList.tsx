@@ -20,6 +20,7 @@ interface CardRow {
   question: string;
   answer_hiragana: string | null;
   answer_romaji: string | null;
+  created_at: string;
   groupIds: string[];
 }
 
@@ -56,6 +57,7 @@ export default function CardsList({
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<Filter>({ kind: "all" });
+  const [sort, setSort] = useState<"oldest" | "newest">("oldest");
   const [isTagOpen, setIsTagOpen] = useState(false);
   const [targetSetId, setTargetSetId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -68,10 +70,16 @@ export default function CardsList({
   const groupById = useMemo(() => Object.fromEntries(groups.map((g) => [g.id, g])), [groups]);
 
   const visibleCards = useMemo(() => {
-    if (filter.kind === "all") return cards;
-    if (filter.kind === "ungrouped") return cards.filter((card) => card.groupIds.length === 0);
-    return cards.filter((card) => card.groupIds.includes(filter.id));
-  }, [cards, filter]);
+    const filtered =
+      filter.kind === "all"
+        ? cards
+        : filter.kind === "ungrouped"
+          ? cards.filter((card) => card.groupIds.length === 0)
+          : cards.filter((card) => card.groupIds.includes(filter.id));
+    // ISO timestamps compare correctly as strings; ties keep their DB order.
+    const direction = sort === "oldest" ? 1 : -1;
+    return [...filtered].sort((a, b) => direction * a.created_at.localeCompare(b.created_at));
+  }, [cards, filter, sort]);
 
   const selectedIds = Array.from(selected);
   const allVisibleSelected =
@@ -232,7 +240,18 @@ export default function CardsList({
           />
           <span className="label-text text-sm">Select all</span>
         </label>
-        <span className="text-xs opacity-60">{selected.size} selected</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs opacity-60">{selected.size} selected</span>
+          <select
+            className="select select-bordered select-xs w-auto"
+            value={sort}
+            onChange={(e) => setSort(e.target.value as "oldest" | "newest")}
+            aria-label="Sort cards by date added"
+          >
+            <option value="oldest">Oldest first</option>
+            <option value="newest">Newest first</option>
+          </select>
+        </div>
       </div>
 
       <div className="card bg-base-100">
@@ -285,7 +304,7 @@ export default function CardsList({
 
       {/* Actions for the current selection */}
       {selected.size > 0 && (
-        <div className="card bg-base-100 sticky bottom-20 z-10 border border-iron">
+        <div className="card bg-base-100 sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-10 border border-iron">
           <div className="card-body p-3 gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium">{selected.size} card(s) selected</span>

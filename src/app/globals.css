@@ -176,10 +176,33 @@ a.card:hover {
   color: var(--color-concrete);
 }
 
-.alert-error {
+/* Status alerts are outlined text, never filled: the theme's *-content colours
+   are light (meant for a filled background) and vanish on concrete. */
+.alert-error,
+.alert-success,
+.alert-warning,
+.alert-info {
   background: transparent;
+}
+
+.alert-error {
   color: var(--color-error);
   border-color: var(--color-error);
+}
+
+.alert-success {
+  color: var(--color-success);
+  border-color: var(--color-success);
+}
+
+.alert-warning {
+  color: var(--color-warning);
+  border-color: var(--color-warning);
+}
+
+.alert-info {
+  color: var(--color-iron);
+  border-color: var(--color-iron);
 }
 
 .stat {

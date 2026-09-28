@@ -8,7 +8,8 @@ import CardsList from "@/components/CardsList";
 import SubmitButton from "@/components/ui/SubmitButton";
 import GroupColorPicker from "@/components/GroupColorPicker";
 import BackButton from "@/components/ui/BackButton";
-import { paintColorFor } from "@/lib/study/groupColors";
+import { getSiteUrl } from "@/lib/siteUrl";
+import CopyField from "@/components/CopyField";
 
 export default async function SetDetailPage({
   params,
@@ -32,7 +33,7 @@ export default async function SetDetailPage({
       supabase.from("groups").select("id, name, color").eq("set_id", setId).order("created_at"),
       supabase
         .from("cards")
-        .select("id, question, answer_hiragana, answer_romaji, card_groups(group_id)")
+        .select("id, question, answer_hiragana, answer_romaji, created_at, card_groups(group_id)")
         .eq("set_id", setId)
         .order("created_at"),
       supabase.from("profiles").select("answer_display_mode").eq("id", user.id).single(),
@@ -41,7 +42,7 @@ export default async function SetDetailPage({
 
   if (!set) notFound();
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const siteUrl = await getSiteUrl();
   const shareLink = set.share_code ? `${siteUrl}/share/${set.share_code}` : null;
 
   const cardRows = (cards ?? []).map((card) => ({
@@ -49,6 +50,7 @@ export default async function SetDetailPage({
     question: card.question,
     answer_hiragana: card.answer_hiragana,
     answer_romaji: card.answer_romaji,
+    created_at: card.created_at,
     groupIds: (card.card_groups ?? []).map((link: { group_id: string }) => link.group_id),
   }));
 
@@ -60,16 +62,7 @@ export default async function SetDetailPage({
 
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-3">
-            {/* The set's colour on the home page (saved, or the automatic one). */}
-            <span
-              className="h-4 w-4 shrink-0 rounded-full border border-iron"
-              style={{ backgroundColor: set.color ?? paintColorFor(set.id) }}
-              title="Set colour"
-              aria-hidden="true"
-            />
-            <h1 className="text-xl font-bold min-w-0 break-words">{set.name}</h1>
-          </div>
+          <h1 className="text-xl font-bold break-words">{set.name}</h1>
           {set.description && <p className="text-sm opacity-70">{set.description}</p>}
         </div>
         <div className="flex gap-1">
@@ -104,9 +97,13 @@ export default async function SetDetailPage({
 
       <div className="flex flex-col">
         <Disclosure title="Share" summary={shareLink ? "Link active" : "Not shared"}>
-          {shareLink ? (
-            <div className="flex flex-col gap-2">
-              <input readOnly value={shareLink} className="input input-bordered input-sm w-full" />
+          {shareLink && set.share_code ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm opacity-60">
+                Send the link, or read out the code — friends enter it under Sets → Import a set.
+              </p>
+              <CopyField label="Link" value={shareLink} />
+              <CopyField label="Code" value={set.share_code} large />
               <form action={revokeShareCode.bind(null, setId)}>
                 <SubmitButton className="btn btn-ghost btn-xs" pendingText="Revoking…">
                   Revoke link

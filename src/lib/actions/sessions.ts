@@ -4,7 +4,12 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { buildQueue, shuffle } from "@/lib/study/buildQueue";
-import type { QueueEntry, RecordSwipeResult, SessionScope } from "@/lib/supabase/database.types";
+import type {
+  QueueEntry,
+  RecordSwipeResult,
+  SessionResultDetail,
+  SessionScope,
+} from "@/lib/supabase/database.types";
 
 const MAX_ACTIVE_SESSIONS = 5;
 
@@ -115,15 +120,85 @@ export async function restartSession(sessionId: string) {
     .single();
   if (!previous) redirect("/study/new");
 
-  await ensureSessionSlot(supabase, user.id);
+  await startRepeatSession(supabase, user.id, {
+    name: previous.name,
+    scope: previous.scope as SessionScope,
+    queue: previous.queue as QueueEntry[],
+  });
+}
 
-  // Drop any cards deleted since the original run.
-  const oldQueue = previous.queue as QueueEntry[];
-  const referenced = oldQueue.flatMap((e) => (e.type === "card" ? [e.cardId] : e.cardIds));
-  const { data: existing } = await supabase.from("cards").select("id").in("id", referenced);
+/**
+ * "Study these again" from a history result. Reuses the original session's
+ * queue when it still exists (keeping its groups); otherwise rebuilds one from
+ * the cards recorded on the result itself.
+ */
+export async function restartFromResult(resultId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: result } = await supabase
+    .from("session_results")
+    .select("session_id, set_id, details")
+    .eq("id", resultId)
+    .eq("user_id", user.id)
+    .single();
+  if (!result) redirect("/history");
+
+  const { data: previous } = result.session_id
+    ? await supabase
+        .from("study_sessions")
+        .select("name, scope, queue")
+        .eq("id", result.session_id)
+        .maybeSingle()
+    : { data: null };
+
+  if (previous) {
+    await startRepeatSession(supabase, user.id, {
+      name: previous.name,
+      scope: previous.scope as SessionScope,
+      queue: previous.queue as QueueEntry[],
+    });
+  }
+
+  // record_swipe reads the set id off the scope when the session finishes, so
+  // a result whose set was deleted (taking its cards with it) can't restart.
+  if (!result.set_id) {
+    redirect(`/study/new?error=${encodeURIComponent("The set from that session no longer exists")}`);
+  }
+
+  const cardIds = Array.from(
+    new Set((result.details as SessionResultDetail[]).map((detail) => detail.card_id))
+  );
+  await startRepeatSession(supabase, user.id, {
+    name: null,
+    scope: { setId: result.set_id, mode: "random", count: cardIds.length },
+    queue: cardIds.map((cardId) => ({ type: "card", cardId, status: "pending" })),
+  });
+}
+
+/**
+ * Inserts a new session over the cards of `source.queue` with every grade
+ * reset, then redirects into it. Cards deleted since are dropped, and a random
+ * sample is reshuffled so the user drills the cards, not the sequence.
+ */
+async function startRepeatSession(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  source: { name: string | null; scope: SessionScope; queue: QueueEntry[] }
+): Promise<never> {
+  await ensureSessionSlot(supabase, userId);
+
+  const referenced = source.queue.flatMap((e) => (e.type === "card" ? [e.cardId] : e.cardIds));
+  const { data: existing } =
+    referenced.length > 0
+      ? await supabase.from("cards").select("id").in("id", referenced)
+      : { data: [] };
   const alive = new Set((existing ?? []).map((card) => card.id));
 
-  let queue = oldQueue.flatMap((entry): QueueEntry[] => {
+  let queue = source.queue.flatMap((entry): QueueEntry[] => {
     if (entry.type === "card") {
       return alive.has(entry.cardId) ? [{ type: "card", cardId: entry.cardId, status: "pending" }] : [];
     }
@@ -138,11 +213,7 @@ export async function restartSession(sessionId: string) {
       },
     ];
   });
-
-  // A random sample gets a new order each run, so the user is drilling the
-  // cards rather than memorising the sequence. Group sessions keep theirs.
-  const scope = previous.scope as SessionScope;
-  if (scope.mode === "random") queue = shuffle(queue);
+  if (source.scope.mode === "random") queue = shuffle(queue);
 
   if (queue.length === 0) {
     redirect(`/study/new?error=${encodeURIComponent("The cards from that session no longer exist")}`);
@@ -151,10 +222,10 @@ export async function restartSession(sessionId: string) {
   const { data: session, error } = await supabase
     .from("study_sessions")
     .insert({
-      user_id: user.id,
-      name: previous.name,
+      user_id: userId,
+      name: source.name,
       status: "active",
-      scope,
+      scope: source.scope,
       queue,
       current_index: 0,
     })
