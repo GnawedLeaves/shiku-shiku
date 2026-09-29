@@ -58,6 +58,7 @@ export default function CardsList({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<Filter>({ kind: "all" });
   const [sort, setSort] = useState<"oldest" | "newest">("oldest");
+  const [search, setSearch] = useState("");
   const [isTagOpen, setIsTagOpen] = useState(false);
   const [targetSetId, setTargetSetId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -80,10 +81,20 @@ export default function CardsList({
         : filter.kind === "ungrouped"
           ? cards.filter((card) => card.groupIds.length === 0)
           : cards.filter((card) => card.groupIds.includes(filter.id));
+    // Matches the English question first and foremost, but kana and romaji too,
+    // so "taberu" or "たべる" also finds "to eat".
+    const term = search.trim().toLowerCase();
+    const searched = term
+      ? filtered.filter((card) =>
+          [card.question, card.answer_hiragana, card.answer_romaji].some((field) =>
+            field?.toLowerCase().includes(term)
+          )
+        )
+      : filtered;
     // ISO timestamps compare correctly as strings; ties keep their DB order.
     const direction = sort === "oldest" ? 1 : -1;
-    return [...filtered].sort((a, b) => direction * a.created_at.localeCompare(b.created_at));
-  }, [cards, filter, sort]);
+    return [...searched].sort((a, b) => direction * a.created_at.localeCompare(b.created_at));
+  }, [cards, filter, sort, search]);
 
   const selectedIds = Array.from(selected);
   const allVisibleSelected =
@@ -209,6 +220,33 @@ export default function CardsList({
     <div className="flex flex-col gap-3">
       {error && <div className="alert alert-error text-sm py-2">{error}</div>}
 
+      <label className="input input-bordered flex items-center gap-2 w-full">
+        <span className="opacity-60 text-sm" aria-hidden="true">
+          Search
+        </span>
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="English word, kana or romaji"
+          className="grow min-w-0"
+          aria-label="Search cards in this set"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+        />
+        {search && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs"
+            onClick={() => setSearch("")}
+            aria-label="Clear search"
+          >
+            Clear
+          </button>
+        )}
+      </label>
+
       {/* Filter by group (tag) */}
       <div className="flex flex-wrap gap-1">
         <FilterChip active={filter.kind === "all"} onClick={() => setFilter({ kind: "all" })}>
@@ -262,7 +300,11 @@ export default function CardsList({
       <div className="card bg-base-100">
         <div className="card-body p-2">
           {visibleCards.length === 0 && (
-            <p className="text-sm opacity-60 p-2">No cards in this group yet.</p>
+            <p className="text-sm opacity-60 p-2">
+              {search.trim()
+                ? `No cards match “${search.trim()}”${filter.kind === "all" ? "" : " in this filter"}.`
+                : "No cards in this group yet."}
+            </p>
           )}
           {visibleCards.map((card) => (
             <div
