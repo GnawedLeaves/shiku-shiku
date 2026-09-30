@@ -1,15 +1,12 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/lib/actions/auth";
 import BottomNav from "@/components/BottomNav";
 import SubmitButton from "@/components/ui/SubmitButton";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     redirect("/login");

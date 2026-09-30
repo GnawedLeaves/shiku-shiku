@@ -36,6 +36,7 @@ export default async function EditCardPage({
               answer_hiragana: card.answer_hiragana ?? "",
               answer_romaji: card.answer_romaji ?? "",
               answer_kanji: card.answer_kanji ?? "",
+              notes: card.notes ?? "",
             }}
           />
           <SubmitButton className="btn btn-primary mt-2" pendingText="Saving…">

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
 import { isValidGroupColor } from "@/lib/study/groupColors";
+import { normalizeRemarks } from "@/lib/study/remarks";
 
 type CardInsert = Database["public"]["Tables"]["cards"]["Insert"];
 
@@ -77,6 +78,7 @@ export async function createCard(setId: string, formData: FormData) {
       answer_hiragana: answerHiragana || null,
       answer_romaji: answerRomaji || null,
       answer_kanji: answerKanji || null,
+      notes: normalizeRemarks(formData.get("notes")),
     })
     .select("id")
     .single();
@@ -107,6 +109,7 @@ export async function updateCard(setId: string, cardId: string, formData: FormDa
       answer_hiragana: answerHiragana || null,
       answer_romaji: answerRomaji || null,
       answer_kanji: answerKanji || null,
+      notes: normalizeRemarks(formData.get("notes")),
     })
     .eq("id", cardId);
 

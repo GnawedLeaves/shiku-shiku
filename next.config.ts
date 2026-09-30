@@ -21,4 +21,7 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withPWA(nextConfig);
+// The PWA plugin injects webpack config, which forces the slow webpack dev
+// compiler. It's disabled in development anyway, so only apply it to
+// production builds and let `next dev` use Turbopack.
+export default process.env.NODE_ENV === "development" ? nextConfig : withPWA(nextConfig);

@@ -5,6 +5,7 @@ import Avatar from "@/components/Avatar";
 import SubmitButton from "@/components/ui/SubmitButton";
 import BackButton from "@/components/ui/BackButton";
 import LinkButton from "@/components/ui/LinkButton";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 export default async function ProfilePage({
   searchParams,
@@ -14,9 +15,7 @@ export default async function ProfilePage({
   const { error } = await searchParams;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   const [{ data: profile }, { count: friendCount }, { count: sessionCount }] = await Promise.all([

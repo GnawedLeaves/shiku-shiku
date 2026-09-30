@@ -4,12 +4,11 @@ import { isDocumentAiConfigured } from "@/lib/pdf/documentAi";
 import { DEFAULT_TEMPLATE_ID, PDF_TEMPLATES } from "@/lib/pdf/templates";
 import SubmitButton from "@/components/ui/SubmitButton";
 import LinkButton from "@/components/ui/LinkButton";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const { data: profile } = await supabase
     .from("profiles")

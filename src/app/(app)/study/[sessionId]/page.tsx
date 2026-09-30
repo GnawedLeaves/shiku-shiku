@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import SwipeSession from "@/components/SwipeSession";
 import { computeScore } from "@/lib/study/score";
 import type { QueueEntry } from "@/lib/supabase/database.types";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 export default async function StudySessionPage({
   params,
@@ -12,9 +13,7 @@ export default async function StudySessionPage({
   const { sessionId } = await params;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) notFound();
 
   const { data: session } = await supabase

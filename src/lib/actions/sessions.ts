@@ -10,6 +10,7 @@ import type {
   SessionResultDetail,
   SessionScope,
 } from "@/lib/supabase/database.types";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 const MAX_ACTIVE_SESSIONS = 5;
 
@@ -38,9 +39,7 @@ export async function createSession(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   await ensureSessionSlot(supabase, user.id);
@@ -108,9 +107,7 @@ export async function createSession(formData: FormData) {
  */
 export async function restartSession(sessionId: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   const { data: previous } = await supabase
@@ -134,9 +131,7 @@ export async function restartSession(sessionId: string) {
  */
 export async function restartFromResult(resultId: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   const { data: result } = await supabase

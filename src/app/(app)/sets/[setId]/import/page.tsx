@@ -4,14 +4,13 @@ import ImportReview from "@/components/ImportReview";
 import { isDocumentAiConfigured } from "@/lib/pdf/documentAi";
 import { DEFAULT_TEMPLATE_ID, PDF_TEMPLATES } from "@/lib/pdf/templates";
 import BackButton from "@/components/ui/BackButton";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 export default async function ImportPage({ params }: { params: Promise<{ setId: string }> }) {
   const { setId } = await params;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) notFound();
 
   const [{ data: set }, { data: groups }, { data: profile }] = await Promise.all([

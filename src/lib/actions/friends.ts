@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 /** Finds people by username or display name, excluding the caller. */
 export async function searchUsers(query: string) {
@@ -10,9 +11,7 @@ export async function searchUsers(query: string) {
   if (term.length < 2) return [];
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return [];
 
   const pattern = `%${term.replace(/[%_]/g, "")}%`;
@@ -28,9 +27,7 @@ export async function searchUsers(query: string) {
 
 export async function sendFriendRequest(addresseeId: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   if (addresseeId === user.id) {
@@ -74,9 +71,7 @@ export async function sendFriendRequest(addresseeId: string) {
 
 export async function acceptFriendRequest(friendshipId: string): Promise<void> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   // Only the person who received the request may accept it.
@@ -91,9 +86,7 @@ export async function acceptFriendRequest(friendshipId: string): Promise<void> {
 
 export async function declineFriendRequest(friendshipId: string): Promise<void> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   await supabase
@@ -108,9 +101,7 @@ export async function declineFriendRequest(friendshipId: string): Promise<void> 
 /** Used for both cancelling a sent request and removing an existing friend. */
 export async function removeFriendship(friendshipId: string): Promise<void> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   await supabase.from("friendships").delete().eq("id", friendshipId);

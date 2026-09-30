@@ -5,6 +5,7 @@ import { deleteBattleRoom, leaveBattleRoom, toggleReady } from "@/lib/actions/ba
 import Avatar from "@/components/Avatar";
 import SubmitButton from "@/components/ui/SubmitButton";
 import BackButton from "@/components/ui/BackButton";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 export default async function BattleRoomPage({
   params,
@@ -14,9 +15,7 @@ export default async function BattleRoomPage({
   const { roomId } = await params;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   const [{ data: room }, { data: members }] = await Promise.all([

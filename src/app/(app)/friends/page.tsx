@@ -8,6 +8,7 @@ import {
 import Avatar from "@/components/Avatar";
 import FriendSearch from "@/components/FriendSearch";
 import SubmitButton from "@/components/ui/SubmitButton";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 interface ProfileSummary {
   id: string;
@@ -18,9 +19,7 @@ interface ProfileSummary {
 
 export default async function FriendsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   const { data: friendships } = await supabase

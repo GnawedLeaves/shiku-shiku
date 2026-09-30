@@ -7,6 +7,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -22,9 +23,7 @@ export async function createBattleRoom(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   const { data: room, error } = await supabase
@@ -66,9 +65,7 @@ export async function joinBattleRoom(formData: FormData) {
 
 export async function toggleReady(roomId: string, isReady: boolean) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   await supabase
@@ -82,9 +79,7 @@ export async function toggleReady(roomId: string, isReady: boolean) {
 
 export async function leaveBattleRoom(roomId: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   await supabase

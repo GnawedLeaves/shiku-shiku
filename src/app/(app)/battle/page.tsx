@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createBattleRoom, joinBattleRoom } from "@/lib/actions/battle";
 import SubmitButton from "@/components/ui/SubmitButton";
 import BackButton from "@/components/ui/BackButton";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 export default async function BattlePage({
   searchParams,
@@ -13,9 +14,7 @@ export default async function BattlePage({
   const { error } = await searchParams;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   const [{ data: sets }, { data: memberships }] = await Promise.all([

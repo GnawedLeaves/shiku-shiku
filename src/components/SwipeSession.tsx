@@ -1,7 +1,7 @@
 "use client";
 
 import { useOptimistic, useRef, useState, startTransition } from "react";
-import { motion, type PanInfo } from "framer-motion";
+import StudyDeck, { Remarks } from "@/components/StudyDeck";
 import { recordSwipe, pauseSession, restartSession } from "@/lib/actions/sessions";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { formatAnswer } from "@/lib/study/formatAnswer";
@@ -15,6 +15,7 @@ interface CardData {
   answer_hiragana: string | null;
   answer_romaji: string | null;
   answer_kanji: string | null;
+  notes?: string | null;
 }
 
 type Result = "correct" | "incorrect";
@@ -193,11 +194,13 @@ export default function SwipeSession({
 
       <div className="flex-1 min-h-0 flex flex-col">
         {currentEntry.type === "card" ? (
-          <SwipeCard
-            key={currentEntry.cardId}
+          // Deliberately not keyed by card: the deck stays mounted so the graded
+          // card can animate away while the next one rises off the stack.
+          <StudyDeck
             card={cardsById[currentEntry.cardId]}
             answerMode={answerMode}
             revealed={revealed.has(currentEntry.cardId)}
+            cardsBehind={progress.total - progress.position}
             onReveal={() => reveal(currentEntry.cardId)}
             onGrade={(result) => grade(currentEntry.cardId, result)}
           />
@@ -215,87 +218,6 @@ export default function SwipeSession({
           />
         )}
       </div>
-    </div>
-  );
-}
-
-function SwipeCard({
-  card,
-  answerMode,
-  revealed,
-  onReveal,
-  onGrade,
-}: {
-  card: CardData;
-  answerMode: AnswerDisplayMode;
-  revealed: boolean;
-  onReveal: () => void;
-  onGrade: (result: Result) => void;
-}) {
-  const [dragX, setDragX] = useState(0);
-
-  function handleDragEnd(_: unknown, info: PanInfo) {
-    setDragX(0);
-    if (!revealed) return;
-    if (info.offset.x > 100) onGrade("correct");
-    else if (info.offset.x < -100) onGrade("incorrect");
-  }
-
-  return (
-    <div className="flex flex-1 min-h-0 flex-col items-center gap-4">
-      <motion.div
-        className="card w-full max-w-md flex-1 min-h-0 select-none cursor-grab active:cursor-grabbing"
-        style={{ touchAction: "pan-y" }}
-        drag={revealed ? "x" : false}
-        dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={0.7}
-        onDrag={(_, info) => setDragX(info.offset.x)}
-        onDragEnd={handleDragEnd}
-        animate={{ x: 0, rotate: 0 }}
-        onClick={() => !revealed && onReveal()}
-        whileTap={{ scale: revealed ? 1.02 : 0.98 }}
-      >
-        <div
-          className="card-body h-full items-center text-center justify-center rounded-box transition-colors"
-          style={{
-            backgroundColor:
-              dragX > 30
-                ? "color-mix(in oklab, var(--color-success) 15%, transparent)"
-                : dragX < -30
-                  ? "color-mix(in oklab, var(--color-error) 15%, transparent)"
-                  : undefined,
-          }}
-        >
-          <p className="text-sm opacity-60 uppercase tracking-wide">Question</p>
-          <h2 className="text-heading px-2 break-words">{card.question}</h2>
-          {revealed ? (
-            <>
-              <div className="divider my-2" />
-              <p className="text-sm opacity-60 uppercase tracking-wide">Answer</p>
-              <p className="text-subheading">{formatAnswer(card, answerMode)}</p>
-              {card.answer_kanji && <p className="text-base opacity-60 mt-1">{card.answer_kanji}</p>}
-            </>
-          ) : (
-            <p className="text-xs opacity-50 mt-2">Tap to reveal</p>
-          )}
-        </div>
-      </motion.div>
-
-      {revealed && (
-        <>
-          <div className="flex w-full max-w-md gap-2 shrink-0">
-            <button className="btn btn-outline flex-1" onClick={() => onGrade("incorrect")}>
-              Don&apos;t know
-            </button>
-            <button className="btn btn-primary flex-1" onClick={() => onGrade("correct")}>
-              Got it
-            </button>
-          </div>
-          <p className="text-xs opacity-50 shrink-0">
-            Swipe right = got it, swipe left = don&apos;t know
-          </p>
-        </>
-      )}
     </div>
   );
 }
@@ -335,6 +257,7 @@ function GroupBatch({
               {isRevealed ? (
                 <>
                   <p className="text-sm opacity-70">{formatAnswer(card, answerMode)}</p>
+                  {card.notes && <Remarks text={card.notes} />}
                   <div className="flex gap-2 mt-1">
                     <button
                       className="btn btn-outline btn-xs"

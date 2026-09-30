@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Avatar from "@/components/Avatar";
 import BackButton from "@/components/ui/BackButton";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
@@ -13,9 +14,7 @@ export default async function SetScoreboardPage({
   const { setId } = await params;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   const { data: set } = await supabase

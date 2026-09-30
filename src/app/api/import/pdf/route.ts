@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { extractVocabRows } from "@/lib/pdf/extractVocab";
 import { readPdfText } from "@/lib/pdf/loadPdf";
 import { rowsToCards } from "@/lib/pdf/rowsToCards";
 import { extractWithDocumentAi, isDocumentAiConfigured } from "@/lib/pdf/documentAi";
 import { getTemplate } from "@/lib/pdf/templates";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -12,10 +12,7 @@ export const maxDuration = 60;
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }

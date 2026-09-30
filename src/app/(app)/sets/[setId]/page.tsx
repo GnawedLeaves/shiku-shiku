@@ -10,6 +10,7 @@ import BackButton from "@/components/ui/BackButton";
 import { getSiteUrl } from "@/lib/siteUrl";
 import CopyField from "@/components/CopyField";
 import LinkButton from "@/components/ui/LinkButton";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 export default async function SetDetailPage({
   params,
@@ -22,9 +23,7 @@ export default async function SetDetailPage({
   const { error } = await searchParams;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) notFound();
 
   const [{ data: set }, { data: groups }, { data: cards }, { data: profile }, { data: otherSets }] =

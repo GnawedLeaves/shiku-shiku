@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { toRomaji } from "@/lib/japanese/kana";
 import type { JapaneseSuggestion } from "@/lib/japanese/suggest";
 import NewGroupField from "@/components/NewGroupField";
+import { REMARKS_MAX_LENGTH } from "@/lib/study/remarks";
 
 interface GroupOption {
   id: string;
@@ -28,9 +29,11 @@ export default function CardFields({
     answer_hiragana?: string;
     answer_romaji?: string;
     answer_kanji?: string;
+    notes?: string;
   };
   selectedGroupIds?: string[];
 }) {
+  const [remarks, setRemarks] = useState(defaults?.notes ?? "");
   const [question, setQuestion] = useState(defaults?.question ?? "");
   const [hiragana, setHiragana] = useState(defaults?.answer_hiragana ?? "");
   const [romaji, setRomaji] = useState(defaults?.answer_romaji ?? "");
@@ -189,6 +192,28 @@ export default function CardFields({
           placeholder="借ります"
           autoComplete="off"
         />
+      </label>
+
+      <label className="form-control">
+        <span className="label-text flex items-baseline justify-between gap-2">
+          <span>Remarks (optional)</span>
+          <span
+            className={`text-xs ${remarks.length >= REMARKS_MAX_LENGTH ? "text-error" : "opacity-60"}`}
+            aria-live="polite"
+          >
+            {remarks.length}/{REMARKS_MAX_LENGTH}
+          </span>
+        </span>
+        <textarea
+          name="notes"
+          value={remarks}
+          onChange={(e) => setRemarks(e.target.value)}
+          maxLength={REMARKS_MAX_LENGTH}
+          rows={3}
+          className="textarea textarea-bordered w-full mt-1"
+          placeholder="Usage notes, example sentence, a memory hook…"
+        />
+        <span className="label-text-alt opacity-60 mt-1">Shown on the back of the card when you study.</span>
       </label>
 
       <fieldset className="form-control flex flex-col gap-2">

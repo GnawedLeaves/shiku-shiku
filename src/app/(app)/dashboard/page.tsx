@@ -2,12 +2,11 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { paintColorFor, readableTextColor } from "@/lib/study/groupColors";
 import LinkButton from "@/components/ui/LinkButton";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const { data: sets } = await supabase
     .from("sets")

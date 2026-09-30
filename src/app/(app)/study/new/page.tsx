@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import StudySessionForm from "@/components/StudySessionForm";
 import SessionsList from "@/components/SessionsList";
 import type { QueueEntry } from "@/lib/supabase/database.types";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 export default async function NewStudySessionPage({
   searchParams,
@@ -10,9 +11,7 @@ export default async function NewStudySessionPage({
 }) {
   const params = await searchParams;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const [{ data: sets }, { data: groups }, { data: sessions }] = await Promise.all([
     supabase.from("sets").select("id, name").eq("owner_id", user!.id).order("name"),

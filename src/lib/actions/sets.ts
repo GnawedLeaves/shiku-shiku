@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { isValidGroupColor } from "@/lib/study/groupColors";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 export async function createSet(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
@@ -15,9 +16,7 @@ export async function createSet(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   const { data, error } = await supabase
