@@ -143,12 +143,14 @@ export default function SwipeSession({
             </p>
           )
         )}
-        <form action={restartSession.bind(null, sessionId)} className="flex items-center gap-2">
-          <span className="text-body-sm">Again?</span>
-          <SubmitButton className="btn btn-primary" pendingText="Restarting…">
-            {cardCount === 1 ? "Restart this card" : `Restart these ${cardCount} cards`}
-          </SubmitButton>
-        </form>
+        {cardCount > 0 && (
+          <form action={restartSession.bind(null, sessionId)} className="flex items-center gap-2">
+            <span className="text-body-sm">Again?</span>
+            <SubmitButton className="btn btn-primary" pendingText="Restarting…">
+              {cardCount === 1 ? "Restart this card" : `Restart these ${cardCount} cards`}
+            </SubmitButton>
+          </form>
+        )}
         <div className="flex flex-wrap gap-2">
           <LinkButton href="/history" className="btn btn-outline">
             See history
