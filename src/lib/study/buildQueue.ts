@@ -31,6 +31,12 @@ export function buildQueue(
     mode: "all" | "random";
     count?: number | "all";
     groupOrder?: string[];
+    /**
+     * Bundle cards sharing a group into one entry (default). Off, every card
+     * is its own entry -- flashcards mode needs that so a missed card can be
+     * shuffled back anywhere in the deck, not just between whole groups.
+     */
+    bundleGroups?: boolean;
     /** Randomise the study order. Without it, cards keep the order given. */
     shuffle?: boolean;
   }
@@ -47,6 +53,10 @@ export function buildQueue(
   // order groups first appear in, the cards inside each group, and where the
   // ungrouped cards fall.
   if (options.shuffle) cards = shuffle(cards);
+
+  if (options.bundleGroups === false) {
+    return cards.map((c) => ({ type: "card", cardId: c.id, status: "pending" }) as const);
+  }
 
   const preferred = options.groupOrder ?? [];
   const primaryGroup = (card: CardLike): string | null => {

@@ -78,6 +78,10 @@ export async function createSession(formData: FormData) {
     count,
     groupOrder: groupIds,
     shuffle: shuffleOrder,
+    // Flashcards over the whole set: one deck of individual cards, so a missed
+    // card can go back anywhere. Selected groups stay bundled -- each group is
+    // its own deck, and a missed card is shuffled back within it.
+    bundleGroups: !(studyMode === "flashcards" && groupIds.length === 0),
   });
 
   const scope: SessionScope = {
