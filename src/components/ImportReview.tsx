@@ -258,14 +258,16 @@ export default function ImportReview({
             )}
           </label>
 
-          <label className="form-control">
+          {/* Explicit flex column + min-w-0: daisyUI 5 dropped `form-control`, so
+              the label was inline and the input could overflow the card. */}
+          <label className="flex min-w-0 flex-col">
             <span className="label-text mb-1">Choose your vocabulary PDF or flashcard CSV</span>
             <input
               type="file"
               accept=".pdf,.csv,.tsv,text/csv,image/*"
               onChange={handleFileChange}
               disabled={status !== "idle"}
-              className="file-input file-input-bordered w-full"
+              className="file-input file-input-bordered file-input-sm w-full min-w-0 max-w-full"
             />
           </label>
 
