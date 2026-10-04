@@ -1,10 +1,9 @@
 "use client";
 
 import { useOptimistic, useRef, useState, startTransition } from "react";
-import StudyDeck, { Remarks } from "@/components/StudyDeck";
+import StudyDeck from "@/components/StudyDeck";
 import { recordSwipe, pauseSession, restartSession } from "@/lib/actions/sessions";
 import SubmitButton from "@/components/ui/SubmitButton";
-import { formatAnswer } from "@/lib/study/formatAnswer";
 import { computeScore } from "@/lib/study/score";
 import type { AnswerDisplayMode, QueueEntry } from "@/lib/supabase/database.types";
 import LinkButton from "@/components/ui/LinkButton";
@@ -165,6 +164,12 @@ export default function SwipeSession({
   }
 
   const progress = cardProgress(optimistic.queue);
+  // A group entry is studied one card at a time on the same deck, in order.
+  const currentCardId =
+    currentEntry.type === "card"
+      ? currentEntry.cardId
+      : (currentEntry.cardIds.find((id) => currentEntry.statuses[id] === "pending") ??
+        currentEntry.cardIds[0]);
 
   return (
     // `h-full` lets the card below fill the space between the header and the
@@ -178,6 +183,9 @@ export default function SwipeSession({
       <div className="flex items-center justify-between">
         <p className="text-sm opacity-60">
           {progress.position} / {progress.total}
+          {currentEntry.type === "group" && (
+            <> · {groupNamesById[currentEntry.groupId] ?? "Group"}</>
+          )}
         </p>
         <form action={pauseSession.bind(null, sessionId)}>
           <SubmitButton className="btn btn-ghost btn-xs" pendingText="Pausing…">
@@ -193,98 +201,17 @@ export default function SwipeSession({
       />
 
       <div className="flex-1 min-h-0 flex flex-col">
-        {currentEntry.type === "card" ? (
-          // Deliberately not keyed by card: the deck stays mounted so the graded
-          // card can animate away while the next one rises off the stack.
-          <StudyDeck
-            card={cardsById[currentEntry.cardId]}
-            answerMode={answerMode}
-            revealed={revealed.has(currentEntry.cardId)}
-            cardsBehind={progress.total - progress.position}
-            onReveal={() => reveal(currentEntry.cardId)}
-            onGrade={(result) => grade(currentEntry.cardId, result)}
-          />
-        ) : (
-          <GroupBatch
-            key={currentEntry.groupId}
-            groupName={groupNamesById[currentEntry.groupId] ?? "Group"}
-            cardIds={currentEntry.cardIds}
-            statuses={currentEntry.statuses}
-            cardsById={cardsById}
-            answerMode={answerMode}
-            revealed={revealed}
-            onReveal={reveal}
-            onGrade={grade}
-          />
-        )}
+        {/* Deliberately not keyed by card: the deck stays mounted so the graded
+            card can animate away while the next one rises off the stack. */}
+        <StudyDeck
+          card={cardsById[currentCardId]}
+          answerMode={answerMode}
+          revealed={revealed.has(currentCardId)}
+          cardsBehind={progress.total - progress.position}
+          onReveal={() => reveal(currentCardId)}
+          onGrade={(result) => grade(currentCardId, result)}
+        />
       </div>
-    </div>
-  );
-}
-
-function GroupBatch({
-  groupName,
-  cardIds,
-  statuses,
-  cardsById,
-  answerMode,
-  revealed,
-  onReveal,
-  onGrade,
-}: {
-  groupName: string;
-  cardIds: string[];
-  statuses: Record<string, "pending" | Result>;
-  cardsById: Record<string, CardData>;
-  answerMode: AnswerDisplayMode;
-  revealed: Set<string>;
-  onReveal: (cardId: string) => void;
-  onGrade: (cardId: string, result: Result) => void;
-}) {
-  const pendingIds = cardIds.filter((id) => statuses[id] === "pending");
-
-  return (
-    <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-y-auto">
-      <h2 className="text-subheading">{groupName}</h2>
-      <p className="text-xs opacity-60">Review each card in this group, then grade it.</p>
-      {pendingIds.map((cardId) => {
-        const card = cardsById[cardId];
-        const isRevealed = revealed.has(cardId);
-        return (
-          <div key={cardId} className="card">
-            <div className="card-body p-4 gap-2">
-              <p className="font-medium">{card.question}</p>
-              {isRevealed ? (
-                <>
-                  <p className="text-sm opacity-70">{formatAnswer(card, answerMode)}</p>
-                  {card.notes && <Remarks text={card.notes} />}
-                  <div className="flex gap-2 mt-1">
-                    <button
-                      className="btn btn-outline btn-xs"
-                      onClick={() => onGrade(cardId, "incorrect")}
-                    >
-                      Don&apos;t know
-                    </button>
-                    <button
-                      className="btn btn-primary btn-xs"
-                      onClick={() => onGrade(cardId, "correct")}
-                    >
-                      Got it
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <button
-                  className="btn btn-outline btn-xs self-start"
-                  onClick={() => onReveal(cardId)}
-                >
-                  Show answer
-                </button>
-              )}
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }

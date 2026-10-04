@@ -38,6 +38,8 @@ export interface SessionScope {
   groupIds?: string[];
   mode: "all" | "random";
   count?: number | "all";
+  /** Study in random order. Absent on older sessions: random samples were always shuffled. */
+  shuffle?: boolean;
 }
 
 export interface Database {

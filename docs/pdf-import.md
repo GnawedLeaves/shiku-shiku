@@ -164,3 +164,15 @@ text PDFs at no cost, so leaving OCR for scans only is the cheap default.
   reference list, as some lesson sheets do) can confuse auto-detected columns, since column
   detection currently works per-page rather than per-table. This mainly affects small side tables
   that aren't the page's main vocabulary content.
+
+## Flashcard CSV import
+
+The same import screen also accepts flashcard CSV exports (e.g. GoodNotes 5 → Export flashcards).
+These have no header row: the front of each card is the first column, the back the second. Sides
+that contain commas or line breaks are quoted. Parsing happens entirely in the browser
+(`src/lib/import/flashcardCsv.ts`), and the sheet-layout template is ignored.
+
+- Front → question. Back → romaji, or → hiragana (with romaji generated) when the back has no Latin
+  letters.
+- A multi-line side is joined into one line with ` / `, since card fields are single-line.
+- Exact duplicate cards are dropped.

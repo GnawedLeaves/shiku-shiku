@@ -9,6 +9,7 @@ import { readPdfTextInBrowser } from "@/lib/pdf/loadPdfInBrowser";
 import { MAX_DIRECT_UPLOAD_BYTES } from "@/lib/pdf/pageText";
 import { getTemplate } from "@/lib/pdf/templates";
 import type { PdfPageText } from "@/lib/pdf/extractVocab";
+import { flashcardCsvToCards, isCsvFile } from "@/lib/import/flashcardCsv";
 
 interface ReviewRow {
   question: string;
@@ -60,6 +61,19 @@ async function readResponse(response: Response): Promise<ImportResponse> {
  * uploaded only when OCR is needed or the browser can't read it.
  */
 async function importFile(file: File, templateId: string): Promise<ImportResponse> {
+  // Flashcard CSVs are already one card per row -- no layout or server needed.
+  if (isCsvFile(file)) {
+    const cards = flashcardCsvToCards(await file.text());
+    return {
+      source: "local",
+      cards,
+      warning:
+        cards.length === 0
+          ? "No cards were found. Each line should be “front,back” (English, then Japanese)."
+          : undefined,
+    };
+  }
+
   const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
   const ocrOnly = !isPdf || getTemplate(templateId).mode === "document-ai";
 
@@ -117,6 +131,7 @@ export default function ImportReview({
 
   const selectedTemplate = templates.find((t) => t.id === templateId);
   const includedCount = rows.filter((row) => row.include).length;
+  const isCsv = file !== null && isCsvFile(file);
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     setFile(event.target.files?.[0] ?? null);
@@ -223,6 +238,7 @@ export default function ImportReview({
               className="select select-bordered w-full"
               value={templateId}
               onChange={(e) => setTemplateId(e.target.value)}
+              disabled={isCsv}
             >
               {templates.map((template) => (
                 <option key={template.id} value={template.id} disabled={!template.available}>
@@ -231,16 +247,22 @@ export default function ImportReview({
                 </option>
               ))}
             </select>
-            {selectedTemplate && (
-              <span className="label-text-alt opacity-60 mt-1">{selectedTemplate.description}</span>
+            {isCsv ? (
+              <span className="label-text-alt opacity-60 mt-1">
+                Not needed for CSV files — each line is read as “front,back”.
+              </span>
+            ) : (
+              selectedTemplate && (
+                <span className="label-text-alt opacity-60 mt-1">{selectedTemplate.description}</span>
+              )
             )}
           </label>
 
           <label className="form-control">
-            <span className="label-text mb-1">Choose your vocabulary PDF</span>
+            <span className="label-text mb-1">Choose your vocabulary PDF or flashcard CSV</span>
             <input
               type="file"
-              accept=".pdf,image/*"
+              accept=".pdf,.csv,.tsv,text/csv,image/*"
               onChange={handleFileChange}
               disabled={status !== "idle"}
               className="file-input file-input-bordered w-full"
@@ -258,8 +280,10 @@ export default function ImportReview({
           </button>
 
           <p className="text-xs opacity-60">
-            Only pages that contain a word table are read — grammar pages and notes are ignored.
-            Everything is shown below for review before anything is saved.
+            PDFs: only pages that contain a word table are read — grammar pages and notes are
+            ignored. CSVs (e.g. a GoodNotes flashcard export): the front of each card becomes the
+            question, the back the answer. Everything is shown below for review before anything is
+            saved.
           </p>
 
           {status === "parsing" && (

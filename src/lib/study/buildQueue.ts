@@ -27,15 +27,26 @@ export function shuffle<T>(items: T[]): T[] {
  */
 export function buildQueue(
   cards: CardLike[],
-  options: { mode: "all" | "random"; count?: number | "all"; groupOrder?: string[] }
+  options: {
+    mode: "all" | "random";
+    count?: number | "all";
+    groupOrder?: string[];
+    /** Randomise the study order. Without it, cards keep the order given. */
+    shuffle?: boolean;
+  }
 ): QueueEntry[] {
   if (options.mode === "random") {
     const requested = options.count === "all" || !options.count ? cards.length : options.count;
     const n = Math.min(requested, cards.length);
-    return shuffle(cards)
-      .slice(0, n)
-      .map((c) => ({ type: "card", cardId: c.id, status: "pending" }) as const);
+    const sample = new Set(shuffle(cards).slice(0, n));
+    const ordered = options.shuffle ? [...sample] : cards.filter((c) => sample.has(c));
+    return ordered.map((c) => ({ type: "card", cardId: c.id, status: "pending" }) as const);
   }
+
+  // Shuffling the cards up front shuffles everything below with them: the
+  // order groups first appear in, the cards inside each group, and where the
+  // ungrouped cards fall.
+  if (options.shuffle) cards = shuffle(cards);
 
   const preferred = options.groupOrder ?? [];
   const primaryGroup = (card: CardLike): string | null => {
@@ -71,4 +82,14 @@ export function buildQueue(
       statuses: Object.fromEntries(cardIds.map((id) => [id, "pending" as const])),
     };
   });
+}
+
+/**
+ * Reshuffles an existing queue for a repeat session: the order of entries and
+ * the cards inside each group, keeping every card under the same group.
+ */
+export function shuffleQueue(queue: QueueEntry[]): QueueEntry[] {
+  return shuffle(queue).map((entry) =>
+    entry.type === "card" ? entry : { ...entry, cardIds: shuffle(entry.cardIds) }
+  );
 }

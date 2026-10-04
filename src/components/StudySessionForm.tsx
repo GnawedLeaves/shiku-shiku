@@ -97,7 +97,7 @@ export default function StudySessionForm({
             </div>
             {groupsChosen && (
               <p className="text-xs opacity-60 mt-1">
-                Cards in each selected group will be shown together as a batch.
+                Each selected group&apos;s cards are studied together, one group after another.
               </p>
             )}
           </div>
@@ -169,6 +169,11 @@ export default function StudySessionForm({
             <input type="hidden" name="count" value={mode === "random" ? resolvedCount : "all"} />
           </>
         )}
+
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" name="shuffle" className="toggle toggle-sm toggle-primary" />
+          <span>Shuffle card order</span>
+        </label>
 
         <label className="form-control">
           <span className="label-text mb-1">Session name (optional)</span>

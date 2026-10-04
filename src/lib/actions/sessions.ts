@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { buildQueue, shuffle } from "@/lib/study/buildQueue";
+import { buildQueue, shuffleQueue } from "@/lib/study/buildQueue";
 import type {
   QueueEntry,
   RecordSwipeResult,
@@ -37,6 +37,7 @@ export async function createSession(formData: FormData) {
   const countRaw = String(formData.get("count") ?? "all");
   const groupIds = formData.getAll("group_ids").map(String).filter(Boolean);
   const name = String(formData.get("name") ?? "").trim();
+  const shuffleOrder = formData.get("shuffle") === "on";
 
   const supabase = await createClient();
   const user = await getCurrentUser();
@@ -70,13 +71,19 @@ export async function createSession(formData: FormData) {
   const effectiveMode: "all" | "random" = groupIds.length > 0 ? "all" : requestedMode;
   const count: number | "all" = countRaw === "all" ? "all" : Math.max(1, Number(countRaw) || 1);
 
-  const queue = buildQueue(cards, { mode: effectiveMode, count, groupOrder: groupIds });
+  const queue = buildQueue(cards, {
+    mode: effectiveMode,
+    count,
+    groupOrder: groupIds,
+    shuffle: shuffleOrder,
+  });
 
   const scope: SessionScope = {
     setId,
     groupIds: groupIds.length > 0 ? groupIds : undefined,
     mode: effectiveMode,
     count,
+    shuffle: shuffleOrder,
   };
 
   const { data: session, error: sessionError } = await supabase
@@ -176,8 +183,8 @@ export async function restartFromResult(resultId: string) {
 
 /**
  * Inserts a new session over the cards of `source.queue` with every grade
- * reset, then redirects into it. Cards deleted since are dropped, and a random
- * sample is reshuffled so the user drills the cards, not the sequence.
+ * reset, then redirects into it. Cards deleted since are dropped, and a
+ * shuffled session is reshuffled so the user drills the cards, not the sequence.
  */
 async function startRepeatSession(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -208,7 +215,7 @@ async function startRepeatSession(
       },
     ];
   });
-  if (source.scope.mode === "random") queue = shuffle(queue);
+  if (source.scope.shuffle ?? source.scope.mode === "random") queue = shuffleQueue(queue);
 
   if (queue.length === 0) {
     redirect(`/study/new?error=${encodeURIComponent("The cards from that session no longer exist")}`);
