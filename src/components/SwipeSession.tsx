@@ -2,7 +2,12 @@
 
 import { useOptimistic, useRef, useState, startTransition } from "react";
 import StudyDeck from "@/components/StudyDeck";
-import { recordSwipe, pauseSession, restartSession } from "@/lib/actions/sessions";
+import {
+  getSessionState,
+  recordSwipe,
+  pauseSession,
+  restartSession,
+} from "@/lib/actions/sessions";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { computeScore } from "@/lib/study/score";
 import type { AnswerDisplayMode, QueueEntry, StudyMode } from "@/lib/supabase/database.types";
@@ -40,6 +45,40 @@ function cardProgress(queue: QueueEntry[]): { position: number; total: number } 
     graded += statuses.filter((status) => status !== "pending").length;
   }
   return { position: Math.min(graded + 1, total), total };
+}
+
+/** JSON with sorted keys, so states from Postgres jsonb and JS compare equal. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_, v) =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)))
+      : v
+  );
+}
+
+function sameState(a: SessionState, b: SessionState): boolean {
+  return a.currentIndex === b.currentIndex && canonical(a.queue) === canonical(b.queue);
+}
+
+/**
+ * fetch() rejects with a TypeError when the request never completes ("Load
+ * failed" in Safari, "Failed to fetch" in Chrome) -- a dropped connection, not
+ * an error from the server.
+ */
+function isNetworkError(error: unknown): boolean {
+  return error instanceof TypeError;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** A failed save, carrying the server's state to resync to if it was readable. */
+class SaveError extends Error {
+  constructor(
+    message: string,
+    readonly server: SessionState | null
+  ) {
+    super(message);
+  }
 }
 
 export default function SwipeSession({
@@ -83,6 +122,11 @@ export default function SwipeSession({
 
   // Grades are queued so rapid taps can't race each other to the server.
   const pendingWrites = useRef<Promise<unknown>>(Promise.resolve());
+  // The last state the server confirmed, kept in step with the write queue.
+  const confirmed = useRef<SessionState>(state);
+  // Bumped when a save fails: grades queued before then were made against a
+  // card order the server never had, so they're dropped instead of sent.
+  const generation = useRef(0);
 
   const isComplete = optimistic.currentIndex >= optimistic.queue.length;
   const currentEntry = optimistic.queue[optimistic.currentIndex];
@@ -93,29 +137,85 @@ export default function SwipeSession({
     setRevealed((prev) => new Set(prev).add(cardId));
   }
 
+  /**
+   * Sends one grade. A dropped request may still have reached the server, so
+   * before resending, the server's state is checked: if it moved on from the
+   * last confirmed state, the grade landed and isn't applied twice.
+   */
+  async function saveGrade(
+    cardId: string,
+    result: Result,
+    requeuePosition: number | undefined
+  ): Promise<SessionState> {
+    const before = confirmed.current;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const saved = await recordSwipe(sessionId, cardId, result, requeuePosition);
+        return { queue: saved.queue, currentIndex: saved.currentIndex };
+      } catch (e) {
+        if (!isNetworkError(e) || attempt >= 2) throw e;
+        await sleep(700 * (attempt + 1));
+        const server = await getSessionState(sessionId);
+        if (!sameState(server, before)) return server;
+      }
+    }
+  }
+
   function grade(cardId: string, result: Result) {
     // Chosen here and sent along, so the server puts a missed card back in the
     // same place the user already sees it go.
     const requeuePosition =
       flashcards && result === "incorrect" ? pickRequeuePosition(optimistic, cardId) : undefined;
+    const gradeGeneration = generation.current;
 
     startTransition(async () => {
       applyOptimistic({ cardId, result, requeuePosition });
       setRevealed(new Set());
 
-      const write = pendingWrites.current.then(() =>
-        recordSwipe(sessionId, cardId, result, requeuePosition)
-      );
+      const write = pendingWrites.current.then(async (): Promise<SessionState | null> => {
+        if (gradeGeneration !== generation.current) return null;
+        try {
+          const next = await saveGrade(cardId, result, requeuePosition);
+          confirmed.current = next;
+          return next;
+        } catch (e) {
+          generation.current++;
+          let server: SessionState | null = null;
+          try {
+            server = await getSessionState(sessionId);
+            confirmed.current = server;
+          } catch {
+            // Still offline; the next grade will be checked against the old state.
+          }
+          throw new SaveError(
+            isNetworkError(e)
+              ? "Couldn't save that answer — check your connection. The card is back on the deck."
+              : e instanceof Error
+                ? e.message
+                : "Couldn't save that answer",
+            server
+          );
+        }
+      });
       pendingWrites.current = write.catch(() => undefined);
 
       try {
-        const confirmed = await write;
-        startTransition(() => {
-          setState({ queue: confirmed.queue, currentIndex: confirmed.currentIndex });
-        });
+        const next = await write;
+        // null: a stale grade that was dropped -- nothing to show.
+        if (next) {
+          startTransition(() => {
+            setState(next);
+            setError(null);
+          });
+        }
       } catch (e) {
-        // The optimistic grade rolls back on its own when the transition ends.
-        setError(e instanceof Error ? e.message : "Couldn't save that answer");
+        // The optimistic grade rolls back on its own when the transition ends;
+        // resyncing makes sure the deck matches what the server actually has.
+        const server = e instanceof SaveError ? e.server : null;
+        startTransition(() => {
+          if (server) setState(server);
+          setError(e instanceof Error ? e.message : "Couldn't save that answer");
+        });
       }
     });
   }

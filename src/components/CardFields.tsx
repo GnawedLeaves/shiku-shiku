@@ -42,7 +42,11 @@ export default function CardFields({
   const [suggestions, setSuggestions] = useState<JapaneseSuggestion[]>([]);
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
-  const [dismissed, setDismissed] = useState(false);
+  // An existing card's question isn't looked up until it's edited: firing a
+  // lookup the moment the edit page opens just races a quick save.
+  const [dismissed, setDismissed] = useState(Boolean(defaults?.question));
+  const questionRef = useRef<HTMLInputElement>(null);
+  const lookup = useRef<AbortController | null>(null);
 
   // Once the user edits romaji themselves, stop overwriting it.
   const romajiTouched = useRef(Boolean(defaults?.answer_romaji));
@@ -62,6 +66,7 @@ export default function CardFields({
     if (!shouldSuggest) return;
 
     const controller = new AbortController();
+    lookup.current = controller;
     // Debounced so a lookup only fires once typing settles.
     const timer = setTimeout(async () => {
       setIsSuggesting(true);
@@ -71,23 +76,40 @@ export default function CardFields({
           signal: controller.signal,
         });
         if (!response.ok) throw new Error("Lookup failed");
-        const payload = (await response.json()) as { suggestions: JapaneseSuggestion[] };
-        setSuggestions(payload.suggestions ?? []);
-      } catch (error) {
-        if ((error as Error).name !== "AbortError") {
+        const payload = (await response.json()) as { suggestions?: JapaneseSuggestion[] };
+        if (controller.signal.aborted) return;
+        setSuggestions(Array.isArray(payload.suggestions) ? payload.suggestions : []);
+      } catch {
+        // Aborted (typing on, saving, leaving the page) is expected -- and
+        // Safari reports a request cut short by navigation as "Load failed"
+        // rather than an AbortError, so check the signal, not the error.
+        if (!controller.signal.aborted) {
           setSuggestError("Couldn't reach the dictionary — type the answer in yourself.");
           setSuggestions([]);
         }
       } finally {
-        setIsSuggesting(false);
+        if (!controller.signal.aborted) setIsSuggesting(false);
       }
     }, 400);
 
     return () => {
       clearTimeout(timer);
       controller.abort();
+      setIsSuggesting(false);
     };
   }, [term, shouldSuggest]);
+
+  // Saving cancels any lookup still in flight, so it can't land mid-submit.
+  useEffect(() => {
+    const form = questionRef.current?.form;
+    if (!form) return;
+    const cancelLookup = () => {
+      lookup.current?.abort();
+      setDismissed(true);
+    };
+    form.addEventListener("submit", cancelLookup);
+    return () => form.removeEventListener("submit", cancelLookup);
+  }, []);
 
   function applySuggestion(suggestion: JapaneseSuggestion) {
     setHiragana(suggestion.hiragana);
@@ -102,6 +124,7 @@ export default function CardFields({
       <label className="form-control">
         <span className="label-text">Question (English)</span>
         <input
+          ref={questionRef}
           name="question"
           required
           value={question}

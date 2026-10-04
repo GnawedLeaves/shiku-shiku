@@ -47,11 +47,33 @@ function newGroupFromForm(formData: FormData) {
 
 async function setCardGroups(cardId: string, groupIds: string[]) {
   const supabase = await createClient();
-  await supabase.from("card_groups").delete().eq("card_id", cardId);
+  const { error: deleteError } = await supabase.from("card_groups").delete().eq("card_id", cardId);
+  if (deleteError) throw new Error(deleteError.message);
   if (groupIds.length === 0) return;
-  await supabase
+  // Upsert, so a second save racing this one can't fail on a duplicate link.
+  const { error } = await supabase
     .from("card_groups")
-    .insert(groupIds.map((groupId) => ({ card_id: cardId, group_id: groupId })));
+    .upsert(
+      groupIds.map((groupId) => ({ card_id: cardId, group_id: groupId })),
+      { onConflict: "card_id,group_id", ignoreDuplicates: true }
+    );
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Applies the form's group choices (and any new group) to a card. Returns an
+ * error message instead of throwing, so the form can show it rather than the
+ * page crashing.
+ */
+async function saveCardGroups(setId: string, cardId: string, formData: FormData) {
+  const groupIds = formData.getAll("group_ids").map(String).filter(Boolean);
+  try {
+    const newGroupId = await createGroupIfRequested(setId, newGroupFromForm(formData));
+    await setCardGroups(cardId, newGroupId ? [...groupIds, newGroupId] : groupIds);
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : "Could not update this card's groups";
+  }
 }
 
 export async function createCard(setId: string, formData: FormData) {
@@ -59,7 +81,6 @@ export async function createCard(setId: string, formData: FormData) {
   const answerHiragana = String(formData.get("answer_hiragana") ?? "").trim();
   const answerRomaji = String(formData.get("answer_romaji") ?? "").trim();
   const answerKanji = String(formData.get("answer_kanji") ?? "").trim();
-  const groupIds = formData.getAll("group_ids").map(String).filter(Boolean);
 
   if (!question || (!answerHiragana && !answerRomaji)) {
     redirect(
@@ -87,10 +108,16 @@ export async function createCard(setId: string, formData: FormData) {
     redirect(`/sets/${setId}/cards/new?error=${encodeURIComponent(error?.message ?? "Could not save")}`);
   }
 
-  const newGroupId = await createGroupIfRequested(setId, newGroupFromForm(formData));
-  await setCardGroups(card.id, newGroupId ? [...groupIds, newGroupId] : groupIds);
-
+  const groupError = await saveCardGroups(setId, card.id, formData);
   revalidatePath(`/sets/${setId}`);
+  if (groupError) {
+    // The card itself saved; send them to edit it with the problem shown.
+    redirect(
+      `/sets/${setId}/cards/${card.id}/edit?error=${encodeURIComponent(
+        `The card was saved, but its groups weren't: ${groupError}`
+      )}`
+    );
+  }
   redirect(`/sets/${setId}`);
 }
 
@@ -99,10 +126,15 @@ export async function updateCard(setId: string, cardId: string, formData: FormDa
   const answerHiragana = String(formData.get("answer_hiragana") ?? "").trim();
   const answerRomaji = String(formData.get("answer_romaji") ?? "").trim();
   const answerKanji = String(formData.get("answer_kanji") ?? "").trim();
-  const groupIds = formData.getAll("group_ids").map(String).filter(Boolean);
+  const editUrl = (message: string) =>
+    `/sets/${setId}/cards/${cardId}/edit?error=${encodeURIComponent(message)}`;
+
+  if (!question || (!answerHiragana && !answerRomaji)) {
+    redirect(editUrl("A question and at least one of hiragana/romaji are required"));
+  }
 
   const supabase = await createClient();
-  await supabase
+  const { error } = await supabase
     .from("cards")
     .update({
       question,
@@ -112,11 +144,11 @@ export async function updateCard(setId: string, cardId: string, formData: FormDa
       notes: normalizeRemarks(formData.get("notes")),
     })
     .eq("id", cardId);
+  if (error) redirect(editUrl(`Couldn't save this card: ${error.message}`));
 
-  const newGroupId = await createGroupIfRequested(setId, newGroupFromForm(formData));
-  await setCardGroups(cardId, newGroupId ? [...groupIds, newGroupId] : groupIds);
-
+  const groupError = await saveCardGroups(setId, cardId, formData);
   revalidatePath(`/sets/${setId}`);
+  if (groupError) redirect(editUrl(`The card was saved, but its groups weren't: ${groupError}`));
   redirect(`/sets/${setId}`);
 }
 

@@ -289,6 +289,23 @@ export async function recordSwipe(
   return outcome;
 }
 
+/**
+ * The session's queue as the server has it. Used to resync the study screen
+ * after a save fails, when the client can't tell whether the grade landed.
+ */
+export async function getSessionState(
+  sessionId: string
+): Promise<{ queue: QueueEntry[]; currentIndex: number }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("study_sessions")
+    .select("queue, current_index")
+    .eq("id", sessionId)
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "Session not found");
+  return { queue: data.queue as QueueEntry[], currentIndex: data.current_index };
+}
+
 export async function pauseSession(sessionId: string) {
   const supabase = await createClient();
   await supabase.from("study_sessions").update({ status: "paused" }).eq("id", sessionId);

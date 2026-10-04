@@ -7,10 +7,13 @@ import BackButton from "@/components/ui/BackButton";
 
 export default async function EditCardPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ setId: string; cardId: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   const { setId, cardId } = await params;
+  const { error } = await searchParams;
 
   const supabase = await createClient();
   const [{ data: card }, { data: groups }, { data: links }] = await Promise.all([
@@ -25,6 +28,7 @@ export default async function EditCardPage({
     <div className="flex flex-col gap-4">
       <BackButton href={`/sets/${setId}`} />
       <h1 className="text-xl font-bold">Edit card</h1>
+      {error && <div className="alert alert-error text-sm py-2">{error}</div>}
 
       <form action={updateCard.bind(null, setId, cardId)} className="card bg-base-100">
         <div className="card-body gap-3">
