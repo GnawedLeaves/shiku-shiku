@@ -172,6 +172,21 @@ export default async function SetDetailPage({
             </SubmitButton>
           </form>
         </Disclosure>
+
+        <Disclosure title="Export" summary="CSV">
+          <p className="text-sm opacity-60">
+            Download every card in this set as a spreadsheet, with columns English, Hiragana,
+            Romaji, Kanji, Groups and Remarks.
+          </p>
+          {/* A plain link, not LinkButton: this is a file download, not a page. */}
+          <a
+            href={`/api/sets/${setId}/export`}
+            download
+            className="btn btn-outline btn-sm self-start"
+          >
+            Export {cardRows.length} card{cardRows.length === 1 ? "" : "s"} to CSV
+          </a>
+        </Disclosure>
       </div>
 
       <h2 className="font-semibold">Cards</h2>

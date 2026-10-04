@@ -77,7 +77,14 @@ export function flashcardCsvToCards(text: string): ParsedRow[] {
   const cards: ParsedRow[] = [];
 
   // Strip a UTF-8 BOM, which some exporters prepend.
-  for (const [front = "", back = ""] of parseCsv(text.replace(/^﻿/, ""), delimiter)) {
+  const records = parseCsv(text.replace(/^﻿/, ""), delimiter);
+
+  const header = records[0]?.map((cell) => cell.trim().toLowerCase()) ?? [];
+  if (header[0] === "english" && header.includes("hiragana")) {
+    return exportedSetToCards(records.slice(1), header);
+  }
+
+  for (const [front = "", back = ""] of records) {
     const question = flatten(front);
     const answer = flatten(back);
     if (!question || !answer) continue;
@@ -97,6 +104,29 @@ export function flashcardCsvToCards(text: string): ParsedRow[] {
   }
 
   return cards;
+}
+
+/** A CSV from this app's own set export (`src/lib/export/setCsv.ts`), mapped by header. */
+function exportedSetToCards(records: string[][], header: string[]): ParsedRow[] {
+  const column = (name: string) => header.indexOf(name);
+  const [english, hiragana, romaji, kanji] = ["english", "hiragana", "romaji", "kanji"].map(column);
+  const cell = (record: string[], index: number) => (index >= 0 ? flatten(record[index] ?? "") : "");
+
+  return records.flatMap((record) => {
+    const question = cell(record, english);
+    const reading = cell(record, hiragana);
+    const romajiText = cell(record, romaji) || toRomaji(reading);
+    if (!question || (!reading && !romajiText)) return [];
+    return [
+      {
+        question,
+        answer_hiragana: reading,
+        answer_romaji: romajiText,
+        answer_kanji: cell(record, kanji),
+        page: 0,
+      },
+    ];
+  });
 }
 
 export function isCsvFile(file: File): boolean {
