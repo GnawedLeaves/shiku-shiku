@@ -26,7 +26,7 @@ export default async function HistoryPage() {
   const { data: results } = await supabase
     .from("session_results")
     .select(
-      "id, session_id, set_id, set_name, score_percentage, correct_count, total_count, duration_seconds, completed_at"
+      "id, session_id, set_id, set_name, score_percentage, correct_count, total_count, duration_seconds, completed_at, study_mode, dont_know_count"
     )
     .eq("user_id", user.id)
     .order("completed_at", { ascending: false })
@@ -44,7 +44,10 @@ export default async function HistoryPage() {
       : { data: [] };
   const sessionNames = new Map((sessionRows ?? []).map((row) => [row.id, row.name]));
   const totalCards = sessions.reduce((sum, s) => sum + s.total_count, 0);
-  const totalCorrect = sessions.reduce((sum, s) => sum + s.correct_count, 0);
+  // Flashcards sessions aren't scored, so the overall percentage is quiz-only.
+  const quizzes = sessions.filter((s) => s.study_mode === "quiz");
+  const quizCards = quizzes.reduce((sum, s) => sum + s.total_count, 0);
+  const quizCorrect = quizzes.reduce((sum, s) => sum + s.correct_count, 0);
 
   return (
     <div className="flex flex-col gap-4">
@@ -66,9 +69,9 @@ export default async function HistoryPage() {
               <div className="stat-value text-2xl">{totalCards}</div>
             </div>
             <div className="stat p-3">
-              <div className="stat-title text-xs">Overall</div>
+              <div className="stat-title text-xs">Quiz overall</div>
               <div className="stat-value text-2xl">
-                {totalCards > 0 ? Math.round((totalCorrect / totalCards) * 100) : 0}%
+                {quizCards > 0 ? `${Math.round((quizCorrect / quizCards) * 100)}%` : "—"}
               </div>
             </div>
           </div>
@@ -97,9 +100,16 @@ export default async function HistoryPage() {
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex flex-wrap gap-x-3 text-xs opacity-60">
-                        <span>
-                          {session.correct_count}/{session.total_count} correct
-                        </span>
+                        {session.study_mode === "flashcards" ? (
+                          <span>
+                            {session.total_count} card{session.total_count === 1 ? "" : "s"} ·{" "}
+                            {session.dont_know_count} don&apos;t know
+                          </span>
+                        ) : (
+                          <span>
+                            {session.correct_count}/{session.total_count} correct
+                          </span>
+                        )}
                         <span>{formatDuration(session.duration_seconds)}</span>
                         <span>
                           {new Date(session.completed_at).toLocaleString(undefined, {
@@ -108,11 +118,15 @@ export default async function HistoryPage() {
                           })}
                         </span>
                       </div>
-                      <span
-                        className={`badge badge-sm shrink-0 ${scoreBadge(session.score_percentage)}`}
-                      >
-                        {Math.round(session.score_percentage)}%
-                      </span>
+                      {session.study_mode === "flashcards" ? (
+                        <span className="badge badge-sm badge-outline shrink-0">Flashcards</span>
+                      ) : (
+                        <span
+                          className={`badge badge-sm shrink-0 ${scoreBadge(session.score_percentage)}`}
+                        >
+                          {Math.round(session.score_percentage)}%
+                        </span>
+                      )}
                     </div>
                   </div>
                 </Link>

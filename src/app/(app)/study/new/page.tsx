@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import StudySessionForm from "@/components/StudySessionForm";
 import SessionsList from "@/components/SessionsList";
-import type { QueueEntry } from "@/lib/supabase/database.types";
+import type { QueueEntry, SessionScope } from "@/lib/supabase/database.types";
 import { getCurrentUser } from "@/lib/supabase/auth";
 
 export default async function NewStudySessionPage({
@@ -18,7 +18,7 @@ export default async function NewStudySessionPage({
     supabase.from("groups").select("id, name, set_id").order("created_at"),
     supabase
       .from("study_sessions")
-      .select("id, name, status, current_index, queue")
+      .select("id, name, status, current_index, queue, scope")
       .eq("user_id", user!.id)
       .neq("status", "completed")
       .order("updated_at", { ascending: false }),
@@ -35,6 +35,7 @@ export default async function NewStudySessionPage({
     status: s.status,
     current_index: s.current_index,
     queueLength: (s.queue as QueueEntry[]).length,
+    studyMode: (s.scope as SessionScope).studyMode ?? "quiz",
   }));
 
   return (

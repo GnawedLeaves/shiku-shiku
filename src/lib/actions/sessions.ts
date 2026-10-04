@@ -9,6 +9,7 @@ import type {
   RecordSwipeResult,
   SessionResultDetail,
   SessionScope,
+  StudyMode,
 } from "@/lib/supabase/database.types";
 import { getCurrentUser } from "@/lib/supabase/auth";
 
@@ -38,6 +39,7 @@ export async function createSession(formData: FormData) {
   const groupIds = formData.getAll("group_ids").map(String).filter(Boolean);
   const name = String(formData.get("name") ?? "").trim();
   const shuffleOrder = formData.get("shuffle") === "on";
+  const studyMode: StudyMode = formData.get("study_mode") === "flashcards" ? "flashcards" : "quiz";
 
   const supabase = await createClient();
   const user = await getCurrentUser();
@@ -84,6 +86,7 @@ export async function createSession(formData: FormData) {
     mode: effectiveMode,
     count,
     shuffle: shuffleOrder,
+    studyMode,
   };
 
   const { data: session, error: sessionError } = await supabase
@@ -143,7 +146,7 @@ export async function restartFromResult(resultId: string) {
 
   const { data: result } = await supabase
     .from("session_results")
-    .select("session_id, set_id, details")
+    .select("session_id, set_id, details, study_mode")
     .eq("id", resultId)
     .eq("user_id", user.id)
     .single();
@@ -176,7 +179,12 @@ export async function restartFromResult(resultId: string) {
   );
   await startRepeatSession(supabase, user.id, {
     name: null,
-    scope: { setId: result.set_id, mode: "random", count: cardIds.length },
+    scope: {
+      setId: result.set_id,
+      mode: "random",
+      count: cardIds.length,
+      studyMode: result.study_mode,
+    },
     queue: cardIds.map((cardId) => ({ type: "card", cardId, status: "pending" })),
   });
 }
@@ -253,7 +261,8 @@ async function startRepeatSession(
 export async function recordSwipe(
   sessionId: string,
   cardId: string,
-  result: "correct" | "incorrect"
+  result: "correct" | "incorrect",
+  requeuePosition?: number
 ): Promise<RecordSwipeResult> {
   const supabase = await createClient();
 
@@ -261,6 +270,7 @@ export async function recordSwipe(
     p_session_id: sessionId,
     p_card_id: cardId,
     p_result: result,
+    p_requeue_position: requeuePosition,
   });
 
   if (error) throw new Error(error.message);

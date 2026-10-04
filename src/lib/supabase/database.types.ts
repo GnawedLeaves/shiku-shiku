@@ -14,6 +14,8 @@ export interface SessionResultDetail {
   answer_hiragana: string | null;
   answer_romaji: string | null;
   result: "correct" | "incorrect" | "pending";
+  /** Times "don't know" was pressed on this card (flashcards mode). */
+  misses?: number;
 }
 
 export interface RecordSwipeResult {
@@ -24,14 +26,21 @@ export interface RecordSwipeResult {
   total?: number;
 }
 
+/**
+ * `misses` counts "don't know" presses in flashcards mode, where a missed card
+ * stays pending and goes back into the deck instead of being marked wrong.
+ */
 export type QueueEntry =
-  | { type: "card"; cardId: string; status: "pending" | "correct" | "incorrect" }
+  | { type: "card"; cardId: string; status: "pending" | "correct" | "incorrect"; misses?: number }
   | {
       type: "group";
       groupId: string;
       cardIds: string[];
       statuses: Record<string, "pending" | "correct" | "incorrect">;
+      misses?: Record<string, number>;
     };
+
+export type StudyMode = "quiz" | "flashcards";
 
 export interface SessionScope {
   setId: string;
@@ -40,6 +49,8 @@ export interface SessionScope {
   count?: number | "all";
   /** Study in random order. Absent on older sessions: random samples were always shuffled. */
   shuffle?: boolean;
+  /** Absent on older sessions, which are all quiz mode. */
+  studyMode?: StudyMode;
 }
 
 export interface Database {
@@ -271,6 +282,8 @@ export interface Database {
           duration_seconds: number | null;
           details: SessionResultDetail[];
           completed_at: string;
+          study_mode: StudyMode;
+          dont_know_count: number;
         };
         Insert: {
           id?: string;
@@ -284,6 +297,8 @@ export interface Database {
           duration_seconds?: number | null;
           details?: SessionResultDetail[];
           completed_at?: string;
+          study_mode?: StudyMode;
+          dont_know_count?: number;
         };
         Update: {
           id?: string;
@@ -297,6 +312,8 @@ export interface Database {
           duration_seconds?: number | null;
           details?: SessionResultDetail[];
           completed_at?: string;
+          study_mode?: StudyMode;
+          dont_know_count?: number;
         };
         Relationships: [];
       };
@@ -407,7 +424,12 @@ export interface Database {
         Returns: number;
       };
       record_swipe: {
-        Args: { p_session_id: string; p_card_id: string; p_result: string };
+        Args: {
+          p_session_id: string;
+          p_card_id: string;
+          p_result: string;
+          p_requeue_position?: number;
+        };
         Returns: RecordSwipeResult;
       };
       set_scoreboard: {

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import SwipeSession from "@/components/SwipeSession";
 import { computeScore } from "@/lib/study/score";
-import type { QueueEntry } from "@/lib/supabase/database.types";
+import type { QueueEntry, SessionScope } from "@/lib/supabase/database.types";
 import { getCurrentUser } from "@/lib/supabase/auth";
 
 export default async function StudySessionPage({
@@ -51,6 +51,7 @@ export default async function StudySessionPage({
       cardsById={cardsById}
       groupNamesById={groupNamesById}
       answerMode={profile?.answer_display_mode ?? "both"}
+      studyMode={(session.scope as SessionScope).studyMode ?? "quiz"}
       initialScore={initialScore}
     />
   );

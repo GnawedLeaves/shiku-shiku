@@ -74,6 +74,7 @@ const cardVariants: Variants = {
  */
 export default function StudyDeck({
   card,
+  cardKey,
   answerMode,
   revealed,
   cardsBehind,
@@ -81,6 +82,8 @@ export default function StudyDeck({
   onGrade,
 }: {
   card: DeckCard;
+  /** Identity for the deck animation; defaults to the card id. */
+  cardKey?: string;
   answerMode: AnswerDisplayMode;
   revealed: boolean;
   /** Cards still to come after this one. */
@@ -120,7 +123,7 @@ export default function StudyDeck({
 
           <AnimatePresence custom={direction} initial={false}>
             <FlipCard
-              key={card.id}
+              key={cardKey ?? card.id}
               card={card}
               answerMode={answerMode}
               revealed={revealed}

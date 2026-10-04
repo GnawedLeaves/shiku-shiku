@@ -11,6 +11,7 @@ interface SessionRow {
   status: string;
   current_index: number;
   queueLength: number;
+  studyMode: "quiz" | "flashcards";
 }
 
 export default function SessionsList({ sessions }: { sessions: SessionRow[] }) {
@@ -41,6 +42,7 @@ export default function SessionsList({ sessions }: { sessions: SessionRow[] }) {
           <div>
             <p className="font-medium">{s.name || "Untitled session"}</p>
             <p className="text-xs opacity-60">
+              {s.studyMode === "flashcards" ? "Flashcards · " : ""}
               {s.status === "paused" ? "Paused" : "In progress"} — {s.current_index}/{s.queueLength}
             </p>
           </div>

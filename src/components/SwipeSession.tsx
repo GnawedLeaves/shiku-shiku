@@ -5,7 +5,15 @@ import StudyDeck from "@/components/StudyDeck";
 import { recordSwipe, pauseSession, restartSession } from "@/lib/actions/sessions";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { computeScore } from "@/lib/study/score";
-import type { AnswerDisplayMode, QueueEntry } from "@/lib/supabase/database.types";
+import type { AnswerDisplayMode, QueueEntry, StudyMode } from "@/lib/supabase/database.types";
+import {
+  applyGrade,
+  cardMisses,
+  countMisses,
+  pickRequeuePosition,
+  type Result,
+  type SessionState,
+} from "@/lib/study/applyGrade";
 import LinkButton from "@/components/ui/LinkButton";
 
 interface CardData {
@@ -15,34 +23,6 @@ interface CardData {
   answer_romaji: string | null;
   answer_kanji: string | null;
   notes?: string | null;
-}
-
-type Result = "correct" | "incorrect";
-
-interface SessionState {
-  queue: QueueEntry[];
-  currentIndex: number;
-}
-
-/** Applies a grade locally, exactly as `record_swipe` does on the server. */
-function applyGrade(state: SessionState, cardId: string, result: Result): SessionState {
-  const queue = state.queue.map((entry, index) => {
-    if (index !== state.currentIndex) return entry;
-    if (entry.type === "card") {
-      return entry.cardId === cardId ? { ...entry, status: result } : entry;
-    }
-    if (!(cardId in entry.statuses)) return entry;
-    return { ...entry, statuses: { ...entry.statuses, [cardId]: result } };
-  });
-
-  const entry = queue[state.currentIndex];
-  const resolved =
-    !entry ||
-    (entry.type === "card"
-      ? entry.status !== "pending"
-      : Object.values(entry.statuses).every((status) => status !== "pending"));
-
-  return { queue, currentIndex: resolved ? state.currentIndex + 1 : state.currentIndex };
 }
 
 /**
@@ -69,6 +49,7 @@ export default function SwipeSession({
   cardsById,
   groupNamesById,
   answerMode,
+  studyMode,
   initialScore,
 }: {
   sessionId: string;
@@ -77,19 +58,24 @@ export default function SwipeSession({
   cardsById: Record<string, CardData>;
   groupNamesById: Record<string, string>;
   answerMode: AnswerDisplayMode;
+  studyMode: StudyMode;
   initialScore: { correct: number; total: number } | null;
 }) {
   // `state` is what the server has confirmed; `optimistic` is what the user
   // sees. The next card appears on the same frame as the tap -- the write to
   // Supabase happens in the background inside the transition.
+  const flashcards = studyMode === "flashcards";
   const [state, setState] = useState<SessionState>({
     queue: initialQueue,
     currentIndex: initialIndex,
   });
   const [optimistic, applyOptimistic] = useOptimistic(
     state,
-    (current: SessionState, action: { cardId: string; result: Result }) =>
-      applyGrade(current, action.cardId, action.result)
+    (current: SessionState, action: { cardId: string; result: Result; requeuePosition?: number }) =>
+      applyGrade(current, action.cardId, action.result, {
+        flashcards,
+        requeuePosition: action.requeuePosition,
+      })
   );
 
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
@@ -101,17 +87,25 @@ export default function SwipeSession({
   const isComplete = optimistic.currentIndex >= optimistic.queue.length;
   const currentEntry = optimistic.queue[optimistic.currentIndex];
   const score = isComplete ? computeScore(optimistic.queue) : initialScore;
+  const misses = countMisses(optimistic.queue);
 
   function reveal(cardId: string) {
     setRevealed((prev) => new Set(prev).add(cardId));
   }
 
   function grade(cardId: string, result: Result) {
+    // Chosen here and sent along, so the server puts a missed card back in the
+    // same place the user already sees it go.
+    const requeuePosition =
+      flashcards && result === "incorrect" ? pickRequeuePosition(optimistic, cardId) : undefined;
+
     startTransition(async () => {
-      applyOptimistic({ cardId, result });
+      applyOptimistic({ cardId, result, requeuePosition });
       setRevealed(new Set());
 
-      const write = pendingWrites.current.then(() => recordSwipe(sessionId, cardId, result));
+      const write = pendingWrites.current.then(() =>
+        recordSwipe(sessionId, cardId, result, requeuePosition)
+      );
       pendingWrites.current = write.catch(() => undefined);
 
       try {
@@ -135,11 +129,19 @@ export default function SwipeSession({
       <div className="flex flex-col gap-6 py-8">
         <h1 className="display">Done.</h1>
         <hr className="hairline" />
-        {score && score.total > 0 && (
+        {flashcards ? (
           <p className="text-subheading">
-            {score.correct} / {score.total} correct —{" "}
-            {Math.round((score.correct / score.total) * 100)}%
+            Cleared all {cardCount} card{cardCount === 1 ? "" : "s"} — pressed &ldquo;don&apos;t
+            know&rdquo; {misses} time{misses === 1 ? "" : "s"}
           </p>
+        ) : (
+          score &&
+          score.total > 0 && (
+            <p className="text-subheading">
+              {score.correct} / {score.total} correct —{" "}
+              {Math.round((score.correct / score.total) * 100)}%
+            </p>
+          )
         )}
         <form action={restartSession.bind(null, sessionId)} className="flex items-center gap-2">
           <span className="text-body-sm">Again?</span>
@@ -186,6 +188,7 @@ export default function SwipeSession({
           {currentEntry.type === "group" && (
             <> · {groupNamesById[currentEntry.groupId] ?? "Group"}</>
           )}
+          {flashcards && <> · Don&apos;t know: {misses}</>}
         </p>
         <form action={pauseSession.bind(null, sessionId)}>
           <SubmitButton className="btn btn-ghost btn-xs" pendingText="Pausing…">
@@ -205,6 +208,9 @@ export default function SwipeSession({
             card can animate away while the next one rises off the stack. */}
         <StudyDeck
           card={cardsById[currentCardId]}
+          // A missed card can come straight back (the last one left); a new
+          // key per miss still lets it animate out and back in.
+          cardKey={`${currentCardId}:${cardMisses(currentEntry, currentCardId)}`}
           answerMode={answerMode}
           revealed={revealed.has(currentCardId)}
           cardsBehind={progress.total - progress.position}

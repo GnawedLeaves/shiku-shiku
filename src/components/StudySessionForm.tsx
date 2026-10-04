@@ -27,6 +27,7 @@ export default function StudySessionForm({
 }) {
   const [setId, setSetId] = useState(initialSetId && sets.some((s) => s.id === initialSetId) ? initialSetId : sets[0]?.id ?? "");
   const [mode, setMode] = useState<"all" | "random">("all");
+  const [studyMode, setStudyMode] = useState<"quiz" | "flashcards">("quiz");
   const [countPreset, setCountPreset] = useState<string>("10");
   const [customCount, setCustomCount] = useState<string>("15");
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
@@ -169,6 +170,32 @@ export default function StudySessionForm({
             <input type="hidden" name="count" value={mode === "random" ? resolvedCount : "all"} />
           </>
         )}
+
+        <div className="form-control">
+          <span className="label-text mb-1">Mode</span>
+          <div className="join">
+            <button
+              type="button"
+              onClick={() => setStudyMode("quiz")}
+              className={`btn btn-sm join-item ${studyMode === "quiz" ? "btn-primary" : "btn-outline"}`}
+            >
+              Quiz
+            </button>
+            <button
+              type="button"
+              onClick={() => setStudyMode("flashcards")}
+              className={`btn btn-sm join-item ${studyMode === "flashcards" ? "btn-primary" : "btn-outline"}`}
+            >
+              Flashcards
+            </button>
+          </div>
+          <p className="text-xs opacity-60 mt-1">
+            {studyMode === "quiz"
+              ? "Each card is shown once and scored."
+              : "Cards you don't know go back into the deck until you've cleared them all. No score — just how many times you pressed “don't know”."}
+          </p>
+          <input type="hidden" name="study_mode" value={studyMode} />
+        </div>
 
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" name="shuffle" className="toggle toggle-sm toggle-primary" />
