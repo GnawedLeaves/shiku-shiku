@@ -23,7 +23,9 @@ Relevant files:
 | --- | --- |
 | `src/lib/pdf/templates.ts` | Template definitions — where the columns are and what they mean |
 | `src/lib/pdf/extractVocab.ts` | Layout logic: rows, columns, cells (pure, no pdfjs) |
-| `src/lib/pdf/loadPdf.ts` | The only file that talks to pdfjs |
+| `src/lib/pdf/pageText.ts` | Reads text + positions from an opened pdfjs document |
+| `src/lib/pdf/loadPdfInBrowser.ts` | Opens the PDF in the browser (the normal path) |
+| `src/lib/pdf/loadPdf.ts` | Opens the PDF on the server (fallback when the file is uploaded) |
 | `src/lib/pdf/roles.ts` | Guesses a column's meaning from its writing system |
 | `src/lib/pdf/documentAi.ts` | Optional OCR fallback |
 | `src/lib/pdf/rowsToCards.ts` | Table rows → card drafts (fills in romaji) |
@@ -146,7 +148,10 @@ text PDFs at no cost, so leaving OCR for scans only is the cheap default.
 
 ## Limits
 
-- Uploads are capped at 15 MB and the first 40 pages.
+- Only the first 40 pages are read. Text PDFs are read in the browser and only their text layer is
+  sent to the server, so they have no file-size limit. Files that need OCR (images, scans, the OCR
+  template) are uploaded as-is and must be under 4 MB — Vercel rejects function request bodies over
+  4.5 MB.
 - Cells that a PDF draws as one text run spanning two columns (a few entries in the sample sheet do
   this) land in the first column — fix them in the review table before saving.
 - The kanji column is only kept when it actually contains kanji; these sheets often use it for a

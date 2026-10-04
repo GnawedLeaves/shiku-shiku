@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { bulkCreateCards } from "@/lib/actions/cards";
 import { toRomaji } from "@/lib/japanese/kana";
 import NewGroupField, { type NewGroupDraft } from "@/components/NewGroupField";
+import { readPdfTextInBrowser } from "@/lib/pdf/loadPdfInBrowser";
+import { MAX_DIRECT_UPLOAD_BYTES } from "@/lib/pdf/pageText";
+import { getTemplate } from "@/lib/pdf/templates";
+import type { PdfPageText } from "@/lib/pdf/extractVocab";
 
 interface ReviewRow {
   question: string;
@@ -29,6 +33,65 @@ interface ImportResponse {
   pagesSkipped?: number[];
   warning?: string;
   error?: string;
+  /** The text layer had no table; the server wants the file itself for OCR. */
+  needsFile?: boolean;
+}
+
+const MAX_DIRECT_UPLOAD_MB = MAX_DIRECT_UPLOAD_BYTES / (1024 * 1024);
+
+async function readResponse(response: Response): Promise<ImportResponse> {
+  // A 413 from Vercel's edge is HTML, not JSON.
+  const payload = (await response.json().catch(() => null)) as ImportResponse | null;
+  if (!payload) {
+    return {
+      error:
+        response.status === 413
+          ? `That file is too large to upload (max ${MAX_DIRECT_UPLOAD_MB} MB).`
+          : "Could not read that file",
+    };
+  }
+  if (!response.ok && !payload.error) payload.error = "Could not read that file";
+  return payload;
+}
+
+/**
+ * Text PDFs are read in the browser and only their text layer is sent, so
+ * they aren't bound by the server's request-size limit. The file itself is
+ * uploaded only when OCR is needed or the browser can't read it.
+ */
+async function importFile(file: File, templateId: string): Promise<ImportResponse> {
+  const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  const ocrOnly = !isPdf || getTemplate(templateId).mode === "document-ai";
+
+  let tooLargeError = `Files sent for OCR must be under ${MAX_DIRECT_UPLOAD_MB} MB. Compress the file or split it into smaller parts.`;
+
+  if (!ocrOnly) {
+    let pages: PdfPageText[] | null = null;
+    try {
+      pages = await readPdfTextInBrowser(file);
+    } catch {
+      tooLargeError = `This PDF couldn't be read in the browser, and it's too large to process on the server (max ${MAX_DIRECT_UPLOAD_MB} MB).`;
+    }
+
+    if (pages) {
+      const payload = await readResponse(
+        await fetch("/api/import/pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ template: templateId, pages }),
+        })
+      );
+      if (!payload.needsFile) return payload;
+      tooLargeError = `No word table was found in the text of this PDF, and it's too large to send for OCR (max ${MAX_DIRECT_UPLOAD_MB} MB). Try a different template, or add the rows by hand below.`;
+    }
+  }
+
+  if (file.size > MAX_DIRECT_UPLOAD_BYTES) return { error: tooLargeError };
+
+  const body = new FormData();
+  body.set("file", file);
+  body.set("template", templateId);
+  return readResponse(await fetch("/api/import/pdf", { method: "POST", body }));
 }
 
 export default function ImportReview({
@@ -45,7 +108,7 @@ export default function ImportReview({
   const router = useRouter();
   const [templateId, setTemplateId] = useState(defaultTemplateId);
   const [rows, setRows] = useState<ReviewRow[]>([]);
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "parsing" | "saving">("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,24 +118,23 @@ export default function ImportReview({
   const selectedTemplate = templates.find((t) => t.id === templateId);
   const includedCount = rows.filter((row) => row.include).length;
 
-  async function handleFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    setFile(event.target.files?.[0] ?? null);
+    setError(null);
+    setMessage(null);
+  }
+
+  async function handleUpload() {
     if (!file) return;
 
-    setFileName(file.name);
     setStatus("parsing");
     setError(null);
     setMessage(null);
 
     try {
-      const body = new FormData();
-      body.set("file", file);
-      body.set("template", templateId);
+      const payload = await importFile(file, templateId);
 
-      const response = await fetch("/api/import/pdf", { method: "POST", body });
-      const payload = (await response.json()) as ImportResponse;
-
-      if (!response.ok || payload.error) {
+      if (payload.error) {
         setError(payload.error ?? "Could not read that file");
         setRows([]);
         return;
@@ -175,22 +237,30 @@ export default function ImportReview({
           </label>
 
           <label className="form-control">
-            <span className="label-text mb-1">Upload your vocabulary PDF</span>
+            <span className="label-text mb-1">Choose your vocabulary PDF</span>
             <input
               type="file"
               accept=".pdf,image/*"
-              onChange={handleFile}
+              onChange={handleFileChange}
               disabled={status !== "idle"}
               className="file-input file-input-bordered w-full"
             />
           </label>
 
+          <button
+            type="button"
+            className="btn btn-primary btn-sm self-start"
+            disabled={!file || status !== "idle"}
+            onClick={handleUpload}
+          >
+            {status === "parsing" && <span className="loading loading-spinner loading-xs" />}
+            Upload
+          </button>
+
           <p className="text-xs opacity-60">
             Only pages that contain a word table are read — grammar pages and notes are ignored.
             Everything is shown below for review before anything is saved.
           </p>
-
-          {fileName && <p className="text-xs opacity-60">File: {fileName}</p>}
 
           {status === "parsing" && (
             <div className="flex items-center gap-2 text-sm">

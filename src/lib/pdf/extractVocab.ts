@@ -1,6 +1,6 @@
 // Pure layout logic for turning PDF text items into vocabulary rows. Kept free
 // of any pdfjs imports so it can be unit-tested (and reasoned about) on plain
-// objects; `loadPdf.ts` is the only place that talks to pdfjs.
+// objects; the `loadPdf*.ts` / `pageText.ts` files are the only places that talk to pdfjs.
 
 import { assignColumnRoles, scoreTexts } from "./roles";
 import { getTemplate, type ColumnRole, type PdfTemplate, type TemplateColumn } from "./templates";

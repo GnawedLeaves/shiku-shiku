@@ -47,3 +47,6 @@ next-env.d.ts
 /public/workbox-*.js
 /public/sw.js.map
 /public/workbox-*.js.map
+
+# pdfjs worker, copied from node_modules by scripts/copy-pdf-worker.mjs
+/public/pdf.worker.min.mjs

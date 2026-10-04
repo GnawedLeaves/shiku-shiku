@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { extractVocabRows } from "@/lib/pdf/extractVocab";
+import { z } from "zod";
+import { extractVocabRows, type ExtractionResult } from "@/lib/pdf/extractVocab";
 import { readPdfText } from "@/lib/pdf/loadPdf";
+import { MAX_DIRECT_UPLOAD_BYTES, MAX_PDF_PAGES } from "@/lib/pdf/pageText";
 import { rowsToCards } from "@/lib/pdf/rowsToCards";
 import { extractWithDocumentAi, isDocumentAiConfigured } from "@/lib/pdf/documentAi";
 import { getTemplate } from "@/lib/pdf/templates";
@@ -9,14 +11,73 @@ import { getCurrentUser } from "@/lib/supabase/auth";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+const NO_TABLE_WARNING =
+  "No word table was found. This PDF's pages may be scans — try the “Scanned sheet (OCR)” template (needs Document AI), pick a different template, or add the rows by hand below.";
 
+/** Text layer read in the browser (see `loadPdfInBrowser.ts`). */
+const extractedTextSchema = z.object({
+  template: z.string().optional(),
+  pages: z
+    .array(
+      z.object({
+        pageNumber: z.number().int().positive(),
+        width: z.number(),
+        height: z.number(),
+        items: z.array(
+          z.object({
+            str: z.string(),
+            x: z.number(),
+            y: z.number(),
+            width: z.number(),
+            height: z.number(),
+          })
+        ),
+      })
+    )
+    .max(MAX_PDF_PAGES),
+});
+
+/**
+ * Two request shapes:
+ *
+ * - JSON `{ template, pages }` -- the PDF's text layer, already read in the
+ *   browser. This is the normal path for text PDFs and has no file-size limit.
+ * - multipart `file` + `template` -- the file itself, for OCR (images, scans,
+ *   the OCR template) or when the browser couldn't read the PDF. Bound by
+ *   Vercel's 4.5 MB request limit.
+ */
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
+  if (request.headers.get("content-type")?.includes("application/json")) {
+    return handleExtractedText(request);
+  }
+  return handleFileUpload(request);
+}
+
+async function handleExtractedText(request: Request) {
+  const parsed = extractedTextSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Could not read that PDF" }, { status: 400 });
+  }
+
+  const template = getTemplate(parsed.data.template);
+  const extraction = extractVocabRows(parsed.data.pages, template.id);
+  if (extraction.rows.length > 0) {
+    return NextResponse.json(localResult(extraction, template.id));
+  }
+
+  // Probably scans: the browser has to send the file itself for OCR.
+  if (isDocumentAiConfigured()) {
+    return NextResponse.json({ ...emptyResult(template.id), needsFile: true });
+  }
+  return NextResponse.json({ ...emptyResult(template.id), warning: NO_TABLE_WARNING });
+}
+
+async function handleFileUpload(request: Request) {
   const formData = await request.formData();
   const file = formData.get("file");
   const templateId = String(formData.get("template") ?? "");
@@ -24,8 +85,8 @@ export async function POST(request: Request) {
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
   }
-  if (file.size > MAX_UPLOAD_BYTES) {
-    return NextResponse.json({ error: "That file is larger than 15 MB" }, { status: 413 });
+  if (file.size > MAX_DIRECT_UPLOAD_BYTES) {
+    return NextResponse.json({ error: "That file is larger than 4 MB" }, { status: 413 });
   }
 
   const template = getTemplate(templateId);
@@ -51,17 +112,9 @@ export async function POST(request: Request) {
 
   let localError: string | null = null;
   try {
-    const pages = await readPdfText(data);
-    const extraction = extractVocabRows(pages, template.id);
-
+    const extraction = extractVocabRows(await readPdfText(data), template.id);
     if (extraction.rows.length > 0) {
-      return NextResponse.json({
-        source: "local" as const,
-        template: template.id,
-        cards: rowsToCards(extraction.rows),
-        pagesUsed: extraction.pagesUsed,
-        pagesSkipped: extraction.pagesSkipped,
-      });
+      return NextResponse.json(localResult(extraction, template.id));
     }
   } catch (error) {
     localError = error instanceof Error ? error.message : "Could not read that PDF";
@@ -79,16 +132,27 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({
+  return NextResponse.json({ ...emptyResult(template.id), warning: localError ?? NO_TABLE_WARNING });
+}
+
+function localResult(extraction: ExtractionResult, templateId: string) {
+  return {
     source: "local" as const,
-    template: template.id,
+    template: templateId,
+    cards: rowsToCards(extraction.rows),
+    pagesUsed: extraction.pagesUsed,
+    pagesSkipped: extraction.pagesSkipped,
+  };
+}
+
+function emptyResult(templateId: string) {
+  return {
+    source: "local" as const,
+    template: templateId,
     cards: [],
     pagesUsed: [],
     pagesSkipped: [],
-    warning:
-      localError ??
-      "No word table was found. This PDF's pages may be scans — try the “Scanned sheet (OCR)” template (needs Document AI), pick a different template, or add the rows by hand below.",
-  });
+  };
 }
 
 async function runDocumentAi(data: ArrayBuffer, mimeType: string, source: "ocr" | "ocr-fallback") {
