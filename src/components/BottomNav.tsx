@@ -10,8 +10,8 @@ const items = [
   { href: "/dashboard", label: "Sets", sections: ["/dashboard", "/sets", "/share"] },
   { href: "/study/new", label: "Study", sections: ["/study"] },
   { href: "/history", label: "History", sections: ["/history"] },
-  { href: "/friends", label: "Friends", sections: ["/friends"] },
-  { href: "/settings", label: "Settings", sections: ["/settings", "/profile", "/battle"] },
+  { href: "/friends", label: "Friends", sections: ["/friends", "/battle"] },
+  { href: "/settings", label: "Settings", sections: ["/settings", "/profile"] },
 ];
 
 function inSection(pathname: string, section: string) {

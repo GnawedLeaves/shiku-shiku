@@ -1,6 +1,7 @@
 import Avatar from "@/components/Avatar";
 import FriendSearch from "@/components/FriendSearch";
 import OnlineDot from "@/components/realtime/OnlineDot";
+import LinkButton from "@/components/ui/LinkButton";
 import SubmitButton from "@/components/ui/SubmitButton";
 import {
   acceptFriendRequest,
@@ -52,7 +53,15 @@ export default async function FriendsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-xl font-bold">Friends</h1>
+      <div className="flex items-end justify-between gap-3">
+        <h1 className="text-xl font-bold">Friends</h1>
+        <div className="flex items-center gap-2">
+          <span className="text-body-sm hidden sm:inline">Up for a challenge?</span>
+          <LinkButton href="/battle" className="btn btn-primary btn-sm">
+            Battles
+          </LinkButton>
+        </div>
+      </div>
 
       <FriendSearch />
 

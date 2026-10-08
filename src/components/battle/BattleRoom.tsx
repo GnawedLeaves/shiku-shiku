@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -228,7 +228,9 @@ function Lobby({
   const isHost = me.isHost;
   const host = isHost ? me : opponent;
   const guest = isHost ? opponent : me;
-  const [setId, setSetId] = useState(room.setId ?? "");
+  // The room's set comes from the server (pushed to the guest by Realtime when
+  // the host changes it); the host's own pick shows instantly while it saves.
+  const [setId, setOptimisticSetId] = useOptimistic(room.setId ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -247,9 +249,9 @@ function Lobby({
           : null;
 
   function pickSet(next: string) {
-    setSetId(next);
     setError(null);
     startTransition(async () => {
+      setOptimisticSetId(next);
       const result = await setBattleSet(room.id, next);
       if ("error" in result && result.error) setError(result.error);
     });

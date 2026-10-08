@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { searchUsers, sendFriendRequest } from "@/lib/actions/friends";
 import Avatar from "@/components/Avatar";
@@ -12,6 +12,10 @@ interface FoundUser {
   avatar_url: string | null;
 }
 
+/** Wait this long after the last keystroke before searching. */
+const SEARCH_DELAY_MS = 300;
+const MIN_QUERY_LENGTH = 2;
+
 export default function FriendSearch() {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -22,13 +26,49 @@ export default function FriendSearch() {
   const [isSending, startSend] = useTransition();
   const [sendingTo, setSendingTo] = useState<string | null>(null);
 
-  function handleSearch(event: React.FormEvent) {
-    event.preventDefault();
-    setMessage(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Each search gets a number; a slow response for an older query is dropped
+  // so results never jump back to what was typed a moment ago.
+  const latestSearch = useRef(0);
+
+  function runSearch(term: string) {
+    const id = ++latestSearch.current;
     startSearch(async () => {
-      setResults(await searchUsers(query));
+      const found = await searchUsers(term);
+      if (id !== latestSearch.current) return;
+      setResults(found);
       setSearched(true);
     });
+  }
+
+  // Search as the user types, once they pause.
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < MIN_QUERY_LENGTH) return;
+    const timer = window.setTimeout(() => runSearch(term), SEARCH_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  function handleChange(value: string) {
+    setQuery(value);
+    setMessage(null);
+    // Too short to search: drop any results (and cancel one in flight).
+    if (value.trim().length < MIN_QUERY_LENGTH) {
+      latestSearch.current++;
+      setResults([]);
+      setSearched(false);
+    }
+  }
+
+  // Enter searches straight away instead of waiting for the pause.
+  function handleSearch(event: React.FormEvent) {
+    event.preventDefault();
+    if (query.trim().length >= MIN_QUERY_LENGTH) runSearch(query.trim());
+  }
+
+  function clear() {
+    handleChange("");
+    inputRef.current?.focus();
   }
 
   function handleAdd(userId: string) {
@@ -49,17 +89,37 @@ export default function FriendSearch() {
       <div className="card-body p-4 gap-3">
         <h2 className="font-semibold text-sm">Find friends</h2>
 
-        <form onSubmit={handleSearch} className="flex gap-2">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Username or name"
-            className="input input-bordered input-sm flex-1"
-          />
-          <button type="submit" className="btn btn-primary btn-sm" disabled={isSearching || query.trim().length < 2}>
-            {isSearching && <span className="loading loading-spinner loading-xs" />}
-            Search
-          </button>
+        <form onSubmit={handleSearch} role="search">
+          <label className="input input-bordered input-sm flex w-full items-center gap-2">
+            <input
+              ref={inputRef}
+              type="search"
+              value={query}
+              onChange={(e) => handleChange(e.target.value)}
+              placeholder="Username or name"
+              aria-label="Search for friends by username or name"
+              className="grow min-w-0"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+            {isSearching && (
+              <span className="loading loading-spinner loading-xs opacity-60" aria-label="Searching" />
+            )}
+            {query && (
+              <button
+                type="button"
+                onClick={clear}
+                className="grid h-5 w-5 shrink-0 place-items-center rounded-full opacity-60 hover:bg-iron hover:text-concrete hover:opacity-100"
+                aria-label="Clear search"
+              >
+                <span aria-hidden="true">✕</span>
+              </button>
+            )}
+          </label>
+          {query.trim().length > 0 && query.trim().length < MIN_QUERY_LENGTH && (
+            <p className="mt-1 text-xs opacity-60">Keep typing — at least 2 characters.</p>
+          )}
         </form>
 
         {message && <p className="text-sm opacity-70">{message}</p>}

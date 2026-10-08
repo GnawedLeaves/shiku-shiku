@@ -5,6 +5,7 @@ import BottomNav from "@/components/BottomNav";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import RealtimeProvider from "@/components/realtime/RealtimeProvider";
+import ActiveBattleBanner from "@/components/battle/ActiveBattleBanner";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -27,6 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </SubmitButton>
             </form>
           </div>
+          <ActiveBattleBanner userId={user.id} />
         </header>
         <main className="flex-1 w-full max-w-2xl mx-auto px-4 pt-6 pb-[calc(7.5rem+env(safe-area-inset-bottom))]">
           {children}

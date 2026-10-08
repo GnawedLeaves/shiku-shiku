@@ -101,9 +101,6 @@ export default async function SettingsPage() {
             <LinkButton href="/profile" className="btn btn-outline btn-sm">
               Edit profile
             </LinkButton>
-            <LinkButton href="/battle" className="btn btn-outline btn-sm">
-              Battles
-            </LinkButton>
           </div>
         </div>
       </div>

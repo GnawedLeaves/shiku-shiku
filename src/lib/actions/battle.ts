@@ -123,6 +123,9 @@ export async function setBattleSet(roomId: string, setId: string) {
     .update({ set_id: setId || null })
     .eq("id", roomId)
     .eq("status", "lobby");
+  // Sends the host's page the saved set with this response, so the picker
+  // doesn't flick back to the old value while waiting for Realtime.
+  revalidatePath(`/battle/${roomId}`);
   return error ? { error: error.message } : { ok: true as const };
 }
 
@@ -149,7 +152,7 @@ export async function startBattle(roomId: string) {
  * both rows stay for the results screen); in the lobby the host closing the
  * room removes it for both players.
  */
-export async function leaveBattleRoom(roomId: string) {
+async function leaveRoom(roomId: string) {
   const supabase = await createClient();
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -175,7 +178,17 @@ export async function leaveBattleRoom(roomId: string) {
   }
 
   revalidatePath("/battle");
+}
+
+/** Leave from inside the room: back to the battles list. */
+export async function leaveBattleRoom(roomId: string) {
+  await leaveRoom(roomId);
   redirect("/battle");
+}
+
+/** Leave from the "you're still in a battle" banner: stay on the current page. */
+export async function leaveBattleFromBanner(roomId: string) {
+  await leaveRoom(roomId);
 }
 
 export async function deleteBattleRoom(roomId: string) {

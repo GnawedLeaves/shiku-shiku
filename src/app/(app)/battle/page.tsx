@@ -37,7 +37,7 @@ export default async function BattlePage({
 
   return (
     <div className="flex flex-col gap-4">
-      <BackButton href="/settings" />
+      <BackButton href="/friends" label="Friends" />
       <div>
         <h1 className="text-xl font-bold">Flashcard battles</h1>
         <p className="text-sm opacity-60">
