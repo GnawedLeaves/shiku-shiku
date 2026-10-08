@@ -29,6 +29,16 @@ function isSpace(event: KeyboardEvent) {
   return event.code === "Space" || event.key === " ";
 }
 
+/** The deck's keys: Space and the left/right arrows (without modifiers, so
+ *  shortcuts like Alt+← for "back" still reach the browser). */
+function deckKey(event: KeyboardEvent): "space" | "left" | "right" | null {
+  if (event.altKey || event.ctrlKey || event.metaKey) return null;
+  if (isSpace(event)) return "space";
+  if (event.key === "ArrowLeft") return "left";
+  if (event.key === "ArrowRight") return "right";
+  return null;
+}
+
 /** True when the key press belongs to a text field, not to the deck. */
 function isTyping(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
@@ -109,21 +119,22 @@ export default function StudyDeck({
     onGrade(result);
   }
 
-  // Space flips the card, then a second press marks it "got it" -- the same
-  // as tapping, for studying from a keyboard. Re-bound every render so it
-  // always sees the current card and reveal state.
+  // Keyboard studying, mirroring the swipe: Space or either arrow flips the
+  // card; then → (or Space) = got it, ← = don't know. Re-bound every render
+  // so it always sees the current card and reveal state.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (!isSpace(event) || isTyping(event.target)) return;
+      const key = deckKey(event);
+      if (!key || isTyping(event.target)) return;
       // Stops the page scrolling, and a focused button from also "clicking".
       event.preventDefault();
       if (event.repeat) return;
-      if (revealed) grade("correct");
-      else onReveal();
+      if (!revealed) onReveal();
+      else grade(key === "left" ? "incorrect" : "correct");
     }
     // Browsers fire a focused button's click on keyup, so swallow that too.
     function onKeyUp(event: KeyboardEvent) {
-      if (isSpace(event) && !isTyping(event.target)) event.preventDefault();
+      if (deckKey(event) && !isTyping(event.target)) event.preventDefault();
     }
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -184,10 +195,20 @@ export default function StudyDeck({
             </button>
           )}
         </div>
-        <p className="text-xs opacity-50 shrink-0">
-          {revealed
-            ? "Swipe right or press Space = got it · swipe left = don't know"
-            : "Tap the card or press Space to flip it"}
+        {/* Touch screens get swipe hints; keyboards get the shortcuts. */}
+        <p className="text-xs opacity-50 shrink-0 text-center pointer-fine:hidden">
+          {revealed ? "Swipe right = got it · swipe left = don't know" : "Tap the card to flip it"}
+        </p>
+        <p className="hidden text-xs opacity-50 shrink-0 text-center pointer-fine:block">
+          {revealed ? (
+            <>
+              <Kbd>→</Kbd> or <Kbd>Space</Kbd> = got it · <Kbd>←</Kbd> = don&apos;t know
+            </>
+          ) : (
+            <>
+              Press <Kbd>Space</Kbd>, <Kbd>←</Kbd> or <Kbd>→</Kbd> to flip — or click the card
+            </>
+          )}
         </p>
       </div>
     </MotionConfig>
@@ -343,5 +364,14 @@ export function Remarks({ text }: { text: string }) {
         </button>
       )}
     </div>
+  );
+}
+
+/** A small keycap for keyboard hints. */
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="inline-block min-w-5 rounded border border-iron/50 px-1 text-center font-sans text-[11px] leading-4">
+      {children}
+    </kbd>
   );
 }

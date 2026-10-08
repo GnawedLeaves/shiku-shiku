@@ -12,6 +12,12 @@ import type {
   StudyMode,
 } from "@/lib/supabase/database.types";
 import { getCurrentUser } from "@/lib/supabase/auth";
+import {
+  keepOnlyCards,
+  missedCardIdsFromDetails,
+  missedCardIdsFromQueue,
+  retryName,
+} from "@/lib/study/missed";
 
 const MAX_ACTIVE_SESSIONS = 5;
 
@@ -191,6 +197,84 @@ export async function restartFromResult(resultId: string) {
       studyMode: result.study_mode,
     },
     queue: cardIds.map((cardId) => ({ type: "card", cardId, status: "pending" })),
+  });
+}
+
+/**
+ * "Redo the ones I missed" from the finish screen: a new session with only
+ * the cards that needed more than one go (flashcards) or were wrong (quiz),
+ * keeping the original's mode, groups and shuffle setting.
+ */
+export async function restartMissed(sessionId: string) {
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const { data: previous } = await supabase
+    .from("study_sessions")
+    .select("name, scope, queue")
+    .eq("id", sessionId)
+    .single();
+  if (!previous) redirect("/study/new");
+
+  const queue = previous.queue as QueueEntry[];
+  const missed = missedCardIdsFromQueue(queue);
+  if (missed.size === 0) redirect(`/study/${sessionId}`);
+
+  await startRepeatSession(supabase, user.id, {
+    name: retryName(previous.name),
+    scope: previous.scope as SessionScope,
+    queue: keepOnlyCards(queue, missed),
+  });
+}
+
+/** The same, from a history result (which records each card's misses). */
+export async function restartMissedFromResult(resultId: string) {
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const { data: result } = await supabase
+    .from("session_results")
+    .select("session_id, set_id, set_name, details, study_mode")
+    .eq("id", resultId)
+    .eq("user_id", user.id)
+    .single();
+  if (!result) redirect("/history");
+
+  const missed = missedCardIdsFromDetails(result.details as SessionResultDetail[]);
+  if (missed.size === 0) redirect(`/history/${resultId}`);
+
+  const { data: previous } = result.session_id
+    ? await supabase
+        .from("study_sessions")
+        .select("name, scope, queue")
+        .eq("id", result.session_id)
+        .maybeSingle()
+    : { data: null };
+
+  // Prefer the original queue, so groups and order carry over.
+  if (previous) {
+    await startRepeatSession(supabase, user.id, {
+      name: retryName(previous.name),
+      scope: previous.scope as SessionScope,
+      queue: keepOnlyCards(previous.queue as QueueEntry[], missed),
+    });
+  }
+
+  if (!result.set_id) {
+    redirect(`/study/new?error=${encodeURIComponent("The set from that session no longer exists")}`);
+  }
+
+  await startRepeatSession(supabase, user.id, {
+    name: retryName(result.set_name ? `${result.set_name} session` : null),
+    scope: {
+      setId: result.set_id,
+      mode: "random",
+      count: missed.size,
+      studyMode: result.study_mode,
+    },
+    queue: Array.from(missed, (cardId) => ({ type: "card" as const, cardId, status: "pending" as const })),
   });
 }
 

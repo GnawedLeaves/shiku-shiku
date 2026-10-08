@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import type { SessionResultDetail } from "@/lib/supabase/database.types";
 import BackButton from "@/components/ui/BackButton";
 import SubmitButton from "@/components/ui/SubmitButton";
-import { restartFromResult } from "@/lib/actions/sessions";
+import { restartFromResult, restartMissedFromResult } from "@/lib/actions/sessions";
+import { missedCardIdsFromDetails } from "@/lib/study/missed";
 import LinkButton from "@/components/ui/LinkButton";
 import { getCurrentUser } from "@/lib/supabase/auth";
 
@@ -42,6 +43,8 @@ export default async function HistoryDetailPage({
     .filter((detail) => (detail.misses ?? 0) > 0)
     .sort((a, b) => (b.misses ?? 0) - (a.misses ?? 0));
   const firstTry = details.filter((detail) => !detail.misses);
+  const missedCount = missedCardIdsFromDetails(details).size;
+  const offerMissed = missedCount > 0 && missedCount < details.length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -122,13 +125,29 @@ export default async function HistoryDetailPage({
       )}
 
       <div className="flex flex-col gap-2 border-t border-iron pt-4">
+        {offerMissed && (
+          <form
+            action={restartMissedFromResult.bind(null, resultId)}
+            className="flex flex-wrap items-center gap-2"
+          >
+            <span className="text-body-sm">Just the tricky ones?</span>
+            <SubmitButton className="btn btn-primary btn-sm" pendingText="Starting…">
+              {flashcards
+                ? `Redo the ${missedCount} you didn't know`
+                : `Redo the ${missedCount} you got wrong`}
+            </SubmitButton>
+          </form>
+        )}
         {details.length > 0 && (
           <form
             action={restartFromResult.bind(null, resultId)}
             className="flex flex-wrap items-center gap-2"
           >
             <span className="text-body-sm">Same words again?</span>
-            <SubmitButton className="btn btn-primary btn-sm" pendingText="Starting…">
+            <SubmitButton
+              className={`btn btn-sm ${offerMissed ? "btn-outline" : "btn-primary"}`}
+              pendingText="Starting…"
+            >
               {details.length === 1 ? "Restart this card" : `Restart these ${details.length} cards`}
             </SubmitButton>
           </form>

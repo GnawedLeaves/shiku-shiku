@@ -6,10 +6,12 @@ import {
   getSessionState,
   recordSwipe,
   pauseSession,
+  restartMissed,
   restartSession,
   saveActiveTime,
 } from "@/lib/actions/sessions";
 import { formatStudyTime, useStudyTimer } from "@/lib/study/useStudyTimer";
+import { missedCardIdsFromQueue } from "@/lib/study/missed";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { computeScore } from "@/lib/study/score";
 import type { AnswerDisplayMode, QueueEntry, StudyMode } from "@/lib/supabase/database.types";
@@ -246,6 +248,8 @@ export default function SwipeSession({
       (total, entry) => total + (entry.type === "card" ? 1 : entry.cardIds.length),
       0
     );
+    // Cards that needed more than one go (flashcards) or were wrong (quiz).
+    const missedCount = missedCardIdsFromQueue(optimistic.queue).size;
     return (
       <div className="flex flex-col gap-6 py-8">
         <h1 className="display">Done.</h1>
@@ -267,10 +271,24 @@ export default function SwipeSession({
             </p>
           )
         )}
+        {/* Only worth offering when it's a real subset of the deck. */}
+        {missedCount > 0 && missedCount < cardCount && (
+          <form action={restartMissed.bind(null, sessionId)} className="flex flex-wrap items-center gap-2">
+            <span className="text-body-sm">Just the tricky ones?</span>
+            <SubmitButton className="btn btn-primary" pendingText="Starting…">
+              {flashcards
+                ? `Redo the ${missedCount} you didn't know`
+                : `Redo the ${missedCount} you got wrong`}
+            </SubmitButton>
+          </form>
+        )}
         {cardCount > 0 && (
           <form action={restartSession.bind(null, sessionId)} className="flex items-center gap-2">
             <span className="text-body-sm">Again?</span>
-            <SubmitButton className="btn btn-primary" pendingText="Restarting…">
+            <SubmitButton
+              className={`btn ${missedCount > 0 && missedCount < cardCount ? "btn-outline" : "btn-primary"}`}
+              pendingText="Restarting…"
+            >
               {cardCount === 1 ? "Restart this card" : `Restart these ${cardCount} cards`}
             </SubmitButton>
           </form>
