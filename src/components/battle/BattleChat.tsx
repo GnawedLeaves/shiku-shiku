@@ -197,21 +197,16 @@ export default function BattleChat({
                   minute: "2-digit",
                 })}
               </p>
-              {/* Each player's bubbles carry their colour: filled for your own,
-                  a thick border in theirs for everyone else. */}
+              {/* Every bubble is filled with its sender's colour, with text
+                  picked to stay readable on it. */}
               <p
-                className={`whitespace-pre-wrap border-2 px-3 py-2 text-sm leading-snug [overflow-wrap:anywhere] ${
+                className={`whitespace-pre-wrap px-3 py-2 text-sm leading-snug [overflow-wrap:anywhere] ${
                   message.status === "sending" ? "opacity-60" : ""
                 }`}
-                style={
-                  own
-                    ? {
-                        backgroundColor: color?.paint ?? "var(--color-iron)",
-                        borderColor: color?.paint ?? "var(--color-iron)",
-                        color: color?.ink ?? "var(--color-concrete)",
-                      }
-                    : { borderColor: color?.paint ?? "var(--color-iron)" }
-                }
+                style={{
+                  backgroundColor: color?.paint ?? "var(--color-iron)",
+                  color: color?.ink ?? "var(--color-concrete)",
+                }}
               >
                 {message.body}
               </p>
