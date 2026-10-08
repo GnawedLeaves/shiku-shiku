@@ -572,6 +572,10 @@ function Game({
   const writes = useRef<Promise<unknown>>(Promise.resolve());
 
   const done = state.currentIndex >= state.queue.length;
+  const opponentName = opponent?.name ?? "Your opponent";
+  // The first to clear the deck wins, but the battle runs until both are done.
+  const iWon = room.winnerId === me.userId;
+  const theyWon = Boolean(room.winnerId) && !iWon;
   const elapsed = useElapsed(room.startedAt, !done);
   const mine = progressStats(state.queue);
   const entry = state.queue[state.currentIndex];
@@ -622,9 +626,16 @@ function Game({
           <SubmitButton
             className="btn btn-ghost btn-xs"
             pendingText="Leaving…"
-            confirmText="Forfeit the battle? Your opponent will win."
+            confirmText={
+              done
+                ? undefined
+                : theyWon
+                  ? `Stop here? ${opponentName} has already won — this ends the battle.`
+                  : "Forfeit the battle? Your opponent will win."
+            }
           >
-            Forfeit
+            {/* Once you've finished, leaving doesn't affect the battle. */}
+            {done ? "Leave" : theyWon ? "Give up" : "Forfeit"}
           </SubmitButton>
         </form>
       </div>
@@ -636,12 +647,36 @@ function Game({
         opponentName={opponent?.name ?? "Opponent"}
       />
 
+      {theyWon && !done && (
+        <p className="border border-iron px-3 py-2 text-sm" role="status">
+          {opponentName} finished first — keep going to complete your deck.
+        </p>
+      )}
+
       <div className="flex flex-1 min-h-0 flex-col">
         {done || !entry || entry.type !== "card" ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-            <span className="loading loading-spinner loading-md" aria-hidden="true" />
-            <p className="text-subheading">Deck cleared!</p>
-            <p className="text-sm opacity-60">Checking who finished first…</p>
+          <div
+            className="flex flex-1 flex-col items-center justify-center gap-3 text-center"
+            role="status"
+          >
+            {iWon ? (
+              <>
+                <p className="display">First!</p>
+                <p className="text-subheading">You cleared the deck in {formatStudyTime(elapsed)}.</p>
+                <p className="flex items-center gap-2 text-sm opacity-60">
+                  <span className="loading loading-dots loading-xs" aria-hidden="true" />
+                  Waiting for {opponentName} to finish — results appear when they&apos;re done.
+                </p>
+              </>
+            ) : (
+              <>
+                <span className="loading loading-spinner loading-md" aria-hidden="true" />
+                <p className="text-subheading">Deck cleared!</p>
+                <p className="text-sm opacity-60">
+                  {theyWon ? "Wrapping up the battle…" : "Checking who finished first…"}
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <StudyDeck
@@ -675,6 +710,8 @@ function Results({
   const won = room.winnerId === me.userId;
   const total = room.deck.length;
   const winner = [me, opponent].find((p) => p?.userId === room.winnerId) ?? null;
+  const runnerUp = [me, opponent].find((p) => p && p.userId !== room.winnerId) ?? null;
+  // The winner never cleared the deck: the other player left before anyone finished.
   const forfeit = Boolean(winner && !winner.finishedAt);
   const secondsBetween = (from: string | null, to: string | null) =>
     from && to ? Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 1000)) : null;
@@ -692,6 +729,13 @@ function Results({
           : winner
             ? `${winner.userId === me.userId ? "You" : winner.name} cleared ${total} cards in ${formatStudyTime(winningTime ?? 0)}.`
             : "The battle is over."}
+        {/* The runner-up stopped before clearing the deck (gave up after the win). */}
+        {!forfeit && runnerUp && !runnerUp.finishedAt && (
+          <span className="block text-body-sm opacity-70 mt-2">
+            {runnerUp.userId === me.userId ? "You" : runnerUp.name} stopped at {runnerUp.cleared} /{" "}
+            {total}.
+          </span>
+        )}
       </p>
 
       <div className="grid grid-cols-2 border-t border-l border-iron">

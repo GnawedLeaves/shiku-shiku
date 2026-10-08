@@ -12,6 +12,8 @@ interface ActiveBattle {
   roomId: string;
   status: BattleRoomStatus;
   isHost: boolean;
+  /** Already cleared the deck and waiting on the opponent. */
+  finished: boolean;
   opponentName: string | null;
 }
 
@@ -35,7 +37,7 @@ export default function ActiveBattleBanner({ userId }: { userId: string }) {
     (async () => {
       const { data } = await supabase
         .from("battle_room_members")
-        .select("room_id, battle_rooms!inner(status, host_id, created_at)")
+        .select("room_id, finished_at, battle_rooms!inner(status, host_id, created_at)")
         .eq("user_id", userId)
         .in("battle_rooms.status", ["lobby", "in_progress"]);
 
@@ -68,6 +70,7 @@ export default function ActiveBattleBanner({ userId }: { userId: string }) {
           roomId: row.room_id,
           status: row.battle_rooms.status,
           isHost: row.battle_rooms.host_id === userId,
+          finished: Boolean(row.finished_at),
           opponentName: opponentId ? (profile?.display_name ?? "your opponent") : null,
         });
       }
@@ -78,15 +81,14 @@ export default function ActiveBattleBanner({ userId }: { userId: string }) {
     };
   }, [supabase, userId, pathname, version]);
 
-  // Joined or left a room anywhere, or the current room finished/closed.
+  // The current room finished or closed. (Joining a room isn't listened for:
+  // every way of joining navigates into the room, and the page change above
+  // re-checks -- reacting to the join itself flashed the banner up while the
+  // redirect to the new room was still on its way.)
   useEffect(() => {
+    if (!battle?.roomId) return;
     const channel = supabase
       .channel(`active-battle:${userId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "battle_room_members", filter: `user_id=eq.${userId}` },
-        recheck
-      )
       .on("postgres_changes", { event: "*", schema: "public", table: "battle_rooms" }, (payload) => {
         const id =
           (payload.new as { id?: string } | null)?.id ?? (payload.old as { id?: string } | null)?.id;
@@ -102,15 +104,19 @@ export default function ActiveBattleBanner({ userId }: { userId: string }) {
 
   const inProgress = battle.status === "in_progress";
   const vs = battle.opponentName ? ` with ${battle.opponentName}` : "";
-  const leaveLabel = inProgress ? "Forfeit" : battle.isHost ? "Close room" : "Leave";
+  // A player who already finished can leave without affecting the battle.
+  const forfeits = inProgress && !battle.finished;
+  const leaveLabel = forfeits ? "Forfeit" : inProgress ? "Leave" : battle.isHost ? "Close room" : "Leave";
 
   return (
     <div role="status" className="border-t border-iron bg-the-red text-iron">
       <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 sm:px-6">
         <p className="min-w-0 flex-1 text-body-sm">
-          {inProgress
-            ? `Your battle${vs} is still going.`
-            : `You're still in a battle room${vs}.`}
+          {battle.finished
+            ? `You finished first — waiting for ${battle.opponentName ?? "your opponent"} to finish.`
+            : inProgress
+              ? `Your battle${vs} is still going.`
+              : `You're still in a battle room${vs}.`}
         </p>
         <div className="flex shrink-0 gap-2">
           <LinkButton href={`/battle/${battle.roomId}`} className="btn btn-primary btn-xs">
@@ -126,9 +132,9 @@ export default function ActiveBattleBanner({ userId }: { userId: string }) {
               className="btn btn-outline btn-xs border-iron text-iron"
               pendingText="Leaving…"
               confirmText={
-                inProgress
+                forfeits
                   ? "Forfeit the battle? Your opponent will win."
-                  : battle.isHost
+                  : !inProgress && battle.isHost
                     ? "Close this room for everyone?"
                     : undefined
               }
