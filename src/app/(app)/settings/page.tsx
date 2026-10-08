@@ -5,6 +5,7 @@ import { DEFAULT_TEMPLATE_ID, PDF_TEMPLATES } from "@/lib/pdf/templates";
 import SubmitButton from "@/components/ui/SubmitButton";
 import LinkButton from "@/components/ui/LinkButton";
 import { getCurrentUser } from "@/lib/supabase/auth";
+import { signOut } from "@/lib/actions/auth";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -101,6 +102,11 @@ export default async function SettingsPage() {
             <LinkButton href="/profile" className="btn btn-outline btn-sm">
               Edit profile
             </LinkButton>
+            <form action={signOut}>
+              <SubmitButton className="btn btn-primary btn-sm" pendingText="Logging out…">
+                Log out
+              </SubmitButton>
+            </form>
           </div>
         </div>
       </div>

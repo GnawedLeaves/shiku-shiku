@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { signOut } from "@/lib/actions/auth";
 import BottomNav from "@/components/BottomNav";
-import SubmitButton from "@/components/ui/SubmitButton";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import RealtimeProvider from "@/components/realtime/RealtimeProvider";
 import ActiveBattleBanner from "@/components/battle/ActiveBattleBanner";
@@ -22,11 +20,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link href="/dashboard" className="text-subheading whitespace-nowrap">
               しく SHIKU
             </Link>
-            <form action={signOut}>
-              <SubmitButton className="btn btn-primary btn-sm" pendingText="Logging out…">
-                Log out
-              </SubmitButton>
-            </form>
           </div>
           <ActiveBattleBanner userId={user.id} />
         </header>
