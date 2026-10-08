@@ -665,30 +665,39 @@ function RaceProgress({
             ? ordinal(player.placement)
             : `${cleared} / ${total}`;
         return (
-          <div key={player.userId} className={`flex flex-col gap-1 ${player.forfeitedAt ? "opacity-50" : ""}`}>
-            <div className="flex items-center justify-between gap-2 text-xs">
-              <span className="flex min-w-0 items-center gap-2">
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full border border-iron"
-                  style={{ backgroundColor: color.paint }}
-                  aria-hidden="true"
-                />
-                <span className="truncate">{isMe ? "You" : player.name}</span>
+          <div
+            key={player.userId}
+            className={`flex items-center gap-3 ${player.forfeitedAt ? "opacity-50" : ""}`}
+          >
+            {/* Who it is: their picture, ringed in their colour to match the bar. */}
+            {/* Fixed-width column so every bar starts at the same x. */}
+            <span className="flex w-10 shrink-0 justify-center">
+              <span
+                className="rounded-full p-[3px]"
+                style={{ backgroundColor: color.paint }}
+                title={isMe ? "You" : player.name}
+              >
+                <Avatar url={player.avatarUrl} name={player.name} size={isMe ? "sm" : "xs"} />
               </span>
-              <span className="tabular-nums opacity-70">{status}</span>
-            </div>
-            <div
-              role="progressbar"
-              aria-label={`${isMe ? "Your" : `${player.name}'s`} progress`}
-              aria-valuemin={0}
-              aria-valuemax={total}
-              aria-valuenow={cleared}
-              className={`w-full border border-iron ${isMe ? "h-3" : "h-1.5"}`}
-            >
+            </span>
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="truncate">{isMe ? "You" : player.name}</span>
+                <span className="tabular-nums opacity-70">{status}</span>
+              </div>
               <div
-                className="h-full transition-[width] duration-300"
-                style={{ width: percent(cleared), backgroundColor: color.paint }}
-              />
+                role="progressbar"
+                aria-label={`${isMe ? "Your" : `${player.name}'s`} progress`}
+                aria-valuemin={0}
+                aria-valuemax={total}
+                aria-valuenow={cleared}
+                className={`w-full border border-iron ${isMe ? "h-3" : "h-1.5"}`}
+              >
+                <div
+                  className="h-full transition-[width] duration-300"
+                  style={{ width: percent(cleared), backgroundColor: color.paint }}
+                />
+              </div>
             </div>
           </div>
         );

@@ -1,6 +1,7 @@
 import Image from "next/image";
 
 const SIZES = {
+  xs: 24,
   sm: 32,
   md: 48,
   lg: 96,
