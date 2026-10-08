@@ -47,3 +47,17 @@ export function retryName(name: string | null): string | null {
   if (!name) return null;
   return name.endsWith(" — retry") ? name : `${name} — retry`;
 }
+
+/**
+ * Known-first-time vs didn't-know as whole percentages that always add up to
+ * 100 (rounding each side separately can give 99 or 101).
+ */
+export function knownSplit(known: number, total: number) {
+  const knownPercent = total > 0 ? Math.round((known / total) * 100) : 0;
+  return {
+    known,
+    missed: Math.max(0, total - known),
+    knownPercent,
+    missedPercent: total > 0 ? 100 - knownPercent : 0,
+  };
+}

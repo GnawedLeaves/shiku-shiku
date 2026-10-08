@@ -138,7 +138,7 @@ async function StudyHistory({ userId }: { userId: string }) {
                       <div className="flex flex-wrap gap-x-3 text-xs opacity-60">
                         {session.study_mode === "flashcards" ? (
                           <span>
-                            {session.total_count} card{session.total_count === 1 ? "" : "s"} ·{" "}
+                            Knew {session.correct_count}/{session.total_count} first time ·{" "}
                             {session.dont_know_count} don&apos;t know
                           </span>
                         ) : (
@@ -155,7 +155,10 @@ async function StudyHistory({ userId }: { userId: string }) {
                         </span>
                       </div>
                       {session.study_mode === "flashcards" ? (
-                        <span className="badge badge-sm badge-outline shrink-0">Flashcards</span>
+                        // Flashcards' stored score is the share known first time.
+                        <span className="badge badge-sm badge-outline shrink-0 tabular-nums">
+                          Flashcards · {Math.round(session.score_percentage)}%
+                        </span>
                       ) : (
                         <span
                           className={`badge badge-sm shrink-0 ${scoreBadge(session.score_percentage)}`}

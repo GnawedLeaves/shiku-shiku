@@ -4,7 +4,8 @@ import type { SessionResultDetail } from "@/lib/supabase/database.types";
 import BackButton from "@/components/ui/BackButton";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { restartFromResult, restartMissedFromResult } from "@/lib/actions/sessions";
-import { missedCardIdsFromDetails } from "@/lib/study/missed";
+import { knownSplit, missedCardIdsFromDetails } from "@/lib/study/missed";
+import KnownSplit from "@/components/KnownSplit";
 import LinkButton from "@/components/ui/LinkButton";
 import { getCurrentUser } from "@/lib/supabase/auth";
 
@@ -44,6 +45,12 @@ export default async function HistoryDetailPage({
     .sort((a, b) => (b.misses ?? 0) - (a.misses ?? 0));
   const firstTry = details.filter((detail) => !detail.misses);
   const missedCount = missedCardIdsFromDetails(details).size;
+  // Known first time = cards with no "don't know" presses. Falls back to the
+  // stored count for results recorded without per-card details.
+  const split = knownSplit(
+    details.length > 0 ? firstTry.length : result.correct_count,
+    result.total_count
+  );
   const offerMissed = missedCount > 0 && missedCount < details.length;
 
   return (
@@ -62,21 +69,25 @@ export default async function HistoryDetailPage({
       </div>
 
       {flashcards ? (
-        <div className="stats stats-horizontal bg-base-100 w-full">
-          <div className="stat p-3">
-            <div className="stat-title text-xs">Flashcards</div>
-            <div className="stat-value text-2xl">{result.total_count}</div>
-            <div className="stat-desc">cards cleared</div>
+        <div className="flex flex-col gap-3">
+          <div className="stats stats-horizontal bg-base-100 w-full">
+            <div className="stat p-3">
+              <div className="stat-title text-xs">Knew first time</div>
+              <div className="stat-value text-2xl text-success">{split.knownPercent}%</div>
+              <div className="stat-desc">
+                {split.known} of {result.total_count} cards
+              </div>
+            </div>
+            <div className="stat p-3">
+              <div className="stat-title text-xs">Didn&apos;t know</div>
+              <div className="stat-value text-2xl text-error">{split.missedPercent}%</div>
+              <div className="stat-desc">
+                {split.missed} card{split.missed === 1 ? "" : "s"} · {result.dont_know_count} press
+                {result.dont_know_count === 1 ? "" : "es"}
+              </div>
+            </div>
           </div>
-          <div className="stat p-3">
-            <div className="stat-title text-xs">Don&apos;t know</div>
-            <div className="stat-value text-2xl text-error">{result.dont_know_count}</div>
-            <div className="stat-desc">times pressed</div>
-          </div>
-          <div className="stat p-3">
-            <div className="stat-title text-xs">First try</div>
-            <div className="stat-value text-2xl text-success">{firstTry.length}</div>
-          </div>
+          <KnownSplit known={split.known} total={result.total_count} />
         </div>
       ) : (
         <div className="stats stats-horizontal bg-base-100 w-full">

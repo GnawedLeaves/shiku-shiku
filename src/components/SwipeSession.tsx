@@ -12,6 +12,7 @@ import {
 } from "@/lib/actions/sessions";
 import { formatStudyTime, useStudyTimer } from "@/lib/study/useStudyTimer";
 import { missedCardIdsFromQueue } from "@/lib/study/missed";
+import KnownSplit from "@/components/KnownSplit";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { computeScore } from "@/lib/study/score";
 import type { AnswerDisplayMode, QueueEntry, StudyMode } from "@/lib/supabase/database.types";
@@ -250,18 +251,29 @@ export default function SwipeSession({
     );
     // Cards that needed more than one go (flashcards) or were wrong (quiz).
     const missedCount = missedCardIdsFromQueue(optimistic.queue).size;
+    // Nothing missed: every card known first time (flashcards) / all right (quiz).
+    const perfect =
+      cardCount > 0 &&
+      (flashcards ? missedCount === 0 : Boolean(score && score.total > 0 && score.correct === score.total));
     return (
       <div className="flex flex-col gap-6 py-8">
-        <h1 className="display">Done.</h1>
+        <h1 className="display">{perfect ? "Perfect." : "Done."}</h1>
         <hr className="hairline" />
         <p className="text-body-sm opacity-70">
           Time studied: <span className="tabular-nums">{formatStudyTime(timer.seconds)}</span>
         </p>
         {flashcards ? (
-          <p className="text-subheading">
-            Cleared all {cardCount} card{cardCount === 1 ? "" : "s"} — pressed &ldquo;don&apos;t
-            know&rdquo; {misses} time{misses === 1 ? "" : "s"}
-          </p>
+          <div className="flex flex-col gap-3">
+            <p className="text-subheading">
+              Knew {cardCount - missedCount} of {cardCount} first time
+            </p>
+            <KnownSplit known={cardCount - missedCount} total={cardCount} />
+            {misses > 0 && (
+              <p className="text-sm opacity-60">
+                Pressed &ldquo;don&apos;t know&rdquo; {misses} time{misses === 1 ? "" : "s"}
+              </p>
+            )}
+          </div>
         ) : (
           score &&
           score.total > 0 && (
