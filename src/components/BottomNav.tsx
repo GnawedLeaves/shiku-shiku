@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLinkStatus } from "next/link";
+import { useTypingOnTouch } from "@/lib/ui/useTypingOnTouch";
 
 // `sections` are the URL prefixes each tab owns, so it stays highlighted on
 // pages below it (e.g. Study while inside a running /study/<id> session).
@@ -20,6 +21,10 @@ function inSection(pathname: string, section: string) {
 
 export default function BottomNav() {
   const pathname = usePathname();
+  // Out of the way while the on-screen keyboard is up, so it doesn't sit on
+  // top of the keyboard and squeeze whatever the user is typing into.
+  const typing = useTypingOnTouch();
+  if (typing) return null;
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-10 border-t border-iron bg-concrete pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-[env(safe-area-inset-bottom)]">

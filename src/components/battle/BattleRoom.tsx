@@ -27,6 +27,7 @@ import type {
   QueueEntry,
 } from "@/lib/supabase/database.types";
 import StudyDeck from "@/components/StudyDeck";
+import BattleChat from "@/components/battle/BattleChat";
 import Avatar from "@/components/Avatar";
 import CopyField from "@/components/CopyField";
 import OnlineDot from "@/components/realtime/OnlineDot";
@@ -359,7 +360,18 @@ function Lobby({
         )}
       </div>
 
-      {isHost && !guest && <InvitePanel roomId={room.id} friends={friends} inviteLink={inviteLink} code={room.code} />}
+      {isHost && !guest && (
+        <InvitePanel roomId={room.id} friends={friends} inviteLink={inviteLink} code={room.code} />
+      )}
+
+      {/* Chat once there's someone to talk to; it carries on after the match. */}
+      {guest && host && (
+        <BattleChat
+          roomId={room.id}
+          meId={me.userId}
+          names={{ [host.userId]: host.name, [guest.userId]: guest.name }}
+        />
+      )}
 
       <form action={leaveBattleRoom.bind(null, room.id)} className="self-start">
         <SubmitButton
@@ -723,6 +735,15 @@ function Results({
           Back to battles
         </LinkButton>
       </div>
+
+      {opponent && (
+        <BattleChat
+          roomId={room.id}
+          meId={me.userId}
+          names={{ [me.userId]: me.name, [opponent.userId]: opponent.name }}
+          title="Post-match chat"
+        />
+      )}
     </div>
   );
 }

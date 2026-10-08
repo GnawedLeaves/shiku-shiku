@@ -459,6 +459,24 @@ export interface Database {
           },
         ];
       };
+      battle_messages: {
+        Row: {
+          id: string;
+          room_id: string;
+          user_id: string;
+          body: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          room_id: string;
+          user_id: string;
+          body: string;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       battle_invites: {
         Row: {
           id: string;

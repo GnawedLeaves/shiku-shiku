@@ -33,6 +33,10 @@ export const viewport: Viewport = {
   // Lets env(safe-area-inset-bottom) report the iPhone home-indicator area so
   // the bottom nav can clear it.
   viewportFit: "cover",
+  // On Android, shrink the page (not just the visible area) when the keyboard
+  // opens, so inputs like the battle chat stay on screen. iOS ignores this;
+  // the chat handles iOS itself via visualViewport.
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
