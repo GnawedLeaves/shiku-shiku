@@ -30,6 +30,14 @@ import type {
 } from "@/lib/supabase/database.types";
 import StudyDeck from "@/components/StudyDeck";
 import BattleChat from "@/components/battle/BattleChat";
+import { EmoteButton, EmoteLayer, type LiveEmote } from "@/components/battle/Emotes";
+import {
+  EMOTE_COOLDOWN_MS,
+  EMOTE_LIFETIME_MS,
+  MAX_VISIBLE_EMOTES,
+  findEmote,
+} from "@/lib/battle/emotes";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import Avatar from "@/components/Avatar";
 import CopyField from "@/components/CopyField";
 import OnlineDot from "@/components/realtime/OnlineDot";
@@ -134,21 +142,66 @@ export default function BattleRoom({
   const supabase = useMemo(() => createClient(), []);
   const me = players.find((p) => p.userId === meId);
   const [live, setLive] = useState<Record<string, LiveProgress>>({});
+  const [emotes, setEmotes] = useState<LiveEmote[]>([]);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  // Last emote time per sender, to drop floods from a misbehaving client.
+  const lastEmoteAt = useRef<Record<string, number>>({});
+  const playerIds = useMemo(() => new Set(players.map((p) => p.userId)), [players]);
+
+  /** Puts an emote on screen (ours or someone else's) and clears it later. */
+  function showEmote(emoteId: string, userId: string) {
+    if (!findEmote(emoteId) || !playerIds.has(userId)) return;
+    const now = Date.now();
+    if (now - (lastEmoteAt.current[userId] ?? 0) < EMOTE_COOLDOWN_MS * 0.8) return;
+    lastEmoteAt.current[userId] = now;
+
+    const id = crypto.randomUUID();
+    const drift = Math.round((Math.random() - 0.5) * 48);
+    setEmotes((current) => [...current, { id, emoteId, userId, drift }].slice(-MAX_VISIBLE_EMOTES));
+    window.setTimeout(
+      () => setEmotes((current) => current.filter((e) => e.id !== id)),
+      EMOTE_LIFETIME_MS
+    );
+  }
+
+  // Emotes are momentary, so they go over Realtime Broadcast on the room's
+  // channel -- straight to the other players, never stored.
+  function sendEmote(emoteId: string) {
+    showEmote(emoteId, meId); // Broadcast doesn't echo back to the sender
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "emote",
+      payload: { emoteId, userId: meId },
+    });
+  }
+
+  const showEmoteRef = useRef(showEmote);
+  useEffect(() => {
+    showEmoteRef.current = showEmote;
+  });
 
   useEffect(() => {
     const channel = supabase
       .channel(`battle-room:${room.id}`)
+      .on("broadcast", { event: "emote" }, ({ payload }) => {
+        const { emoteId, userId } = (payload ?? {}) as { emoteId?: string; userId?: string };
+        if (emoteId && userId && userId !== meId) showEmoteRef.current(emoteId, userId);
+      })
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "battle_rooms", filter: `id=eq.${room.id}` },
         () => router.refresh()
       )
       // Deletes can't be filtered server-side; match the room id here.
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "battle_rooms" }, (payload) => {
-        if ((payload.old as { id?: string }).id === room.id) {
-          router.push(`/battle?error=${encodeURIComponent("The host closed the room")}`);
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "battle_rooms" },
+        (payload) => {
+          if ((payload.old as { id?: string }).id === room.id) {
+            router.push(`/battle?error=${encodeURIComponent("The host closed the room")}`);
+          }
         }
-      })
+      )
       .on(
         "postgres_changes",
         {
@@ -177,8 +230,10 @@ export default function BattleRoom({
         }
       )
       .subscribe();
+    channelRef.current = channel;
 
     return () => {
+      channelRef.current = null;
       supabase.removeChannel(channel);
     };
   }, [supabase, router, room.id, room.status, meId]);
@@ -202,15 +257,27 @@ export default function BattleRoom({
 
   if (room.status === "in_progress") {
     return (
-      <Game
-        room={room}
-        me={me}
-        // The server's copy, with any fresher Realtime progress laid over it.
-        others={players
-          .filter((p) => p.userId !== meId)
-          .map((p) => ({ ...p, ...live[p.userId] }))}
-        answerMode={answerMode}
-      />
+      <>
+        <Game
+          room={room}
+          me={me}
+          // The server's copy, with any fresher Realtime progress laid over it.
+          others={players
+            .filter((p) => p.userId !== meId)
+            .map((p) => ({ ...p, ...live[p.userId] }))}
+          answerMode={answerMode}
+        />
+        <EmoteLayer
+          emotes={emotes}
+          players={Object.fromEntries(
+            players.map((p) => [
+              p.userId,
+              { name: p.name, avatarUrl: p.avatarUrl, color: colorOf(p) },
+            ])
+          )}
+        />
+        <EmoteButton onSend={sendEmote} />
+      </>
     );
   }
 
@@ -277,7 +344,9 @@ function Lobby({
     cardLimit: room.cardLimit,
   });
   const [customDraft, setCustomDraft] = useState(
-    room.cardLimit && !CARD_PRESETS.includes(room.cardLimit as 20 | 50) ? String(room.cardLimit) : ""
+    room.cardLimit && !CARD_PRESETS.includes(room.cardLimit as 20 | 50)
+      ? String(room.cardLimit)
+      : ""
   );
   const [customOpen, setCustomOpen] = useState(Boolean(customDraft));
 
@@ -327,8 +396,8 @@ function Lobby({
   }
 
   // Sets grouped by owner: the host's first, then each other player's.
-  const owners = [players.find((p) => p.isHost), ...others].filter(
-    (p): p is BattlePlayer => Boolean(p)
+  const owners = [players.find((p) => p.isHost), ...others].filter((p): p is BattlePlayer =>
+    Boolean(p)
   );
 
   return (
@@ -376,7 +445,10 @@ function Lobby({
             {owners.map((owner) => {
               const sets = setOptions.filter((option) => option.ownerId === owner.userId);
               return (
-                <optgroup key={owner.userId} label={owner.isHost ? "Your sets" : `${owner.name}'s sets`}>
+                <optgroup
+                  key={owner.userId}
+                  label={owner.isHost ? "Your sets" : `${owner.name}'s sets`}
+                >
                   {sets.length === 0 ? (
                     <option disabled>No sets to show</option>
                   ) : (
@@ -401,7 +473,9 @@ function Lobby({
           <details className="group border border-iron">
             <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 select-none [&::-webkit-details-marker]:hidden">
               <span className="text-body-sm">Battle options</span>
-              <span className="text-sm opacity-60">{describeOptions(options.shuffle, options.cardLimit)}</span>
+              <span className="text-sm opacity-60">
+                {describeOptions(options.shuffle, options.cardLimit)}
+              </span>
               <span
                 className="ml-auto text-lg leading-none transition-transform group-open:rotate-45"
                 aria-hidden="true"
@@ -466,13 +540,17 @@ function Lobby({
                   </p>
                 )}
                 {options.cardLimit && (!chosen || options.cardLimit < chosen.cardCount) && (
-                  <p className="text-xs opacity-60">A random {options.cardLimit} cards from the set.</p>
+                  <p className="text-xs opacity-60">
+                    A random {options.cardLimit} cards from the set.
+                  </p>
                 )}
               </div>
             </div>
           </details>
         ) : (
-          <p className="text-sm opacity-60">{describeOptions(options.shuffle, options.cardLimit)}</p>
+          <p className="text-sm opacity-60">
+            {describeOptions(options.shuffle, options.cardLimit)}
+          </p>
         )}
 
         <p className="text-xs opacity-60">
@@ -514,16 +592,13 @@ function Lobby({
       </div>
 
       {isHost && !full && (
-        <InvitePanel
-          roomId={room.id}
-          friends={friends}
-          inviteLink={inviteLink}
-          code={room.code}
-        />
+        <InvitePanel roomId={room.id} friends={friends} inviteLink={inviteLink} code={room.code} />
       )}
 
       {/* Chat once there's someone to talk to; it carries on after the match. */}
-      {players.length >= 2 && <BattleChat roomId={room.id} meId={me.userId} players={chatPlayers(players)} />}
+      {players.length >= 2 && (
+        <BattleChat roomId={room.id} meId={me.userId} players={chatPlayers(players)} />
+      )}
 
       <form action={leaveBattleRoom.bind(null, room.id)} className="self-start">
         <SubmitButton
@@ -539,9 +614,7 @@ function Lobby({
 }
 
 function chatPlayers(players: BattlePlayer[]) {
-  return Object.fromEntries(
-    players.map((p) => [p.userId, { name: p.name, color: colorOf(p) }])
-  );
+  return Object.fromEntries(players.map((p) => [p.userId, { name: p.name, color: colorOf(p) }]));
 }
 
 function InvitePanel({
@@ -651,7 +724,10 @@ function RaceProgress({
   total: number;
 }) {
   const percent = (value: number) => `${total > 0 ? Math.min(100, (value / total) * 100) : 0}%`;
-  const rows = [{ player: me, cleared: mine, isMe: true }, ...others.map((p) => ({ player: p, cleared: p.cleared, isMe: false }))];
+  const rows = [
+    { player: me, cleared: mine, isMe: true },
+    ...others.map((p) => ({ player: p, cleared: p.cleared, isMe: false })),
+  ];
   const ahead = others.filter((p) => p.cleared > mine).length;
   const position = ahead + 1;
 
@@ -822,8 +898,12 @@ function Game({
           >
             {me.placement ? (
               <>
-                <p className="display">{me.placement === 1 ? "First!" : `${ordinal(me.placement)}!`}</p>
-                <p className="text-subheading">You cleared the deck in {formatStudyTime(elapsed)}.</p>
+                <p className="display">
+                  {me.placement === 1 ? "First!" : `${ordinal(me.placement)}!`}
+                </p>
+                <p className="text-subheading">
+                  You cleared the deck in {formatStudyTime(elapsed)}.
+                </p>
                 {stillPlaying.length > 0 && (
                   <p className="flex items-center gap-2 text-sm opacity-60">
                     <span className="loading loading-dots loading-xs" aria-hidden="true" />
@@ -873,7 +953,9 @@ function Results({
 }) {
   const total = room.deck.length;
   const secondsBetween = (from: string | null, to: string | null) =>
-    from && to ? Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 1000)) : null;
+    from && to
+      ? Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 1000))
+      : null;
 
   // Placed players in order, then anyone who gave up (most cards first).
   const ranked = [...players].sort(
