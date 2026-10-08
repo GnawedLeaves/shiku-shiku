@@ -32,7 +32,10 @@ const errorRedirect = (path: string, message: string) =>
 export async function createBattleRoom(formData: FormData) {
   const setId = String(formData.get("set_id") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
-  const inviteUserId = String(formData.get("invite") ?? "").trim();
+  // One or more friends to invite straight away (Rematch invites everyone).
+  const inviteUserIds = Array.from(
+    new Set(formData.getAll("invite").map((v) => String(v).trim()).filter(Boolean))
+  );
 
   const supabase = await createClient();
   const user = await getCurrentUser();
@@ -57,10 +60,11 @@ export async function createBattleRoom(formData: FormData) {
     .insert({ room_id: room!.id, user_id: user.id });
   if (memberError) errorRedirect("/battle", memberError.message);
 
-  if (inviteUserId) {
+  if (inviteUserIds.length > 0) {
+    // Non-friends are rejected by RLS row by row; the room is still created.
     await supabase
       .from("battle_invites")
-      .insert({ room_id: room!.id, from_user: user.id, to_user: inviteUserId });
+      .insert(inviteUserIds.map((to) => ({ room_id: room!.id, from_user: user.id, to_user: to })));
   }
 
   revalidatePath("/battle");
@@ -125,6 +129,26 @@ export async function setBattleSet(roomId: string, setId: string) {
     .eq("status", "lobby");
   // Sends the host's page the saved set with this response, so the picker
   // doesn't flick back to the old value while waiting for Realtime.
+  revalidatePath(`/battle/${roomId}`);
+  return error ? { error: error.message } : { ok: true as const };
+}
+
+/**
+ * Host sets how the deck is drawn: shuffled or in set order, and how many
+ * cards (null = the whole set). Applied when the battle starts.
+ */
+export async function setBattleOptions(
+  roomId: string,
+  options: { shuffle: boolean; cardLimit: number | null }
+) {
+  const cardLimit =
+    options.cardLimit === null ? null : Math.max(1, Math.floor(Number(options.cardLimit) || 1));
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("battle_rooms")
+    .update({ shuffle: options.shuffle, card_limit: cardLimit })
+    .eq("id", roomId)
+    .eq("status", "lobby");
   revalidatePath(`/battle/${roomId}`);
   return error ? { error: error.message } : { ok: true as const };
 }

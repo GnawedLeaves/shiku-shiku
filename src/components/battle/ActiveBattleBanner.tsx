@@ -58,9 +58,9 @@ export default function ActiveBattleBanner({ userId }: { userId: string }) {
         .from("battle_room_members")
         .select("user_id")
         .eq("room_id", row.room_id)
-        .neq("user_id", userId)
-        .limit(1);
+        .neq("user_id", userId);
       const opponentId = others?.[0]?.user_id;
+      const extra = Math.max(0, (others?.length ?? 0) - 1);
       const { data: profile } = opponentId
         ? await supabase.from("profiles").select("display_name").eq("id", opponentId).maybeSingle()
         : { data: null };
@@ -71,7 +71,10 @@ export default function ActiveBattleBanner({ userId }: { userId: string }) {
           status: row.battle_rooms.status,
           isHost: row.battle_rooms.host_id === userId,
           finished: Boolean(row.finished_at),
-          opponentName: opponentId ? (profile?.display_name ?? "your opponent") : null,
+          // "Aiko", or "Aiko + 2 others" in a bigger room.
+          opponentName: opponentId
+            ? `${profile?.display_name ?? "a friend"}${extra ? ` + ${extra} other${extra === 1 ? "" : "s"}` : ""}`
+            : null,
         });
       }
     })();
@@ -113,7 +116,7 @@ export default function ActiveBattleBanner({ userId }: { userId: string }) {
       <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 sm:px-6">
         <p className="min-w-0 flex-1 text-body-sm">
           {battle.finished
-            ? `You finished first — waiting for ${battle.opponentName ?? "your opponent"} to finish.`
+            ? "You've finished — waiting for the others to finish."
             : inProgress
               ? `Your battle${vs} is still going.`
               : `You're still in a battle room${vs}.`}
@@ -133,7 +136,7 @@ export default function ActiveBattleBanner({ userId }: { userId: string }) {
               pendingText="Leaving…"
               confirmText={
                 forfeits
-                  ? "Forfeit the battle? Your opponent will win."
+                  ? "Give up the battle? You'll be listed as giving up."
                   : !inProgress && battle.isHost
                     ? "Close this room for everyone?"
                     : undefined

@@ -6,6 +6,7 @@ import SubmitButton from "@/components/ui/SubmitButton";
 import BackButton from "@/components/ui/BackButton";
 import LinkButton from "@/components/ui/LinkButton";
 import { getCurrentUser } from "@/lib/supabase/auth";
+import { getRewardSummary, progressToNextMedal } from "@/lib/rewards/summary";
 
 export default async function ProfilePage({
   searchParams,
@@ -18,7 +19,7 @@ export default async function ProfilePage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { count: friendCount }, { count: sessionCount }] = await Promise.all([
+  const [{ data: profile }, { count: friendCount }, { count: sessionCount }, rewards] = await Promise.all([
     supabase
       .from("profiles")
       .select("display_name, username, avatar_url")
@@ -33,6 +34,7 @@ export default async function ProfilePage({
       .from("session_results")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id),
+    getRewardSummary(),
   ]);
 
   return (
@@ -124,6 +126,42 @@ export default async function ProfilePage({
           <div className="stat-value text-2xl">{sessionCount ?? 0}</div>
         </div>
       </div>
+
+      {/* Rewards (skeleton): points from battles, medals at thresholds. */}
+      {rewards && (
+        <section className="flex flex-col gap-3 border border-iron p-4" aria-label="Rewards">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-subheading">Rewards</h2>
+            <span className="text-subheading tabular-nums">{rewards.points} pts</span>
+          </div>
+          {rewards.medals.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {rewards.medals.map((medal) => (
+                <span key={medal.id} className="rounded-full bg-iron px-3 py-1 text-sm text-concrete">
+                  {medal.name}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm opacity-60">No medals yet — place in battles to earn points.</p>
+          )}
+          {rewards.next_medal && (
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between text-xs opacity-70">
+                <span>Next: {rewards.next_medal.name}</span>
+                <span className="tabular-nums">
+                  {rewards.points} / {rewards.next_medal.threshold}
+                </span>
+              </div>
+              <progress
+                className="progress progress-primary w-full"
+                value={progressToNextMedal(rewards)}
+                max={1}
+              />
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="flex gap-2">
         <LinkButton href="/friends" className="btn btn-outline btn-sm">

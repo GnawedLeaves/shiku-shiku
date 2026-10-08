@@ -7,6 +7,7 @@ import {
   createBattleRoom,
   inviteToBattle,
   leaveBattleRoom,
+  setBattleOptions,
   setBattleSet,
   startBattle,
   toggleReady,
@@ -20,6 +21,7 @@ import {
   type SessionState,
 } from "@/lib/study/applyGrade";
 import { formatStudyTime } from "@/lib/study/useStudyTimer";
+import { ordinal, playerColor, type PlayerColor } from "@/lib/battle/players";
 import type {
   AnswerDisplayMode,
   BattleCard,
@@ -37,6 +39,8 @@ import LinkButton from "@/components/ui/LinkButton";
 
 export interface BattlePlayer {
   userId: string;
+  /** Position in join order; fixes the player's colour. */
+  joinIndex: number;
   name: string;
   avatarUrl: string | null;
   isHost: boolean;
@@ -47,6 +51,9 @@ export interface BattlePlayer {
   dontKnow: number;
   firstTry: number;
   finishedAt: string | null;
+  /** 1 = first to clear the deck. Null until they finish (or if they gave up). */
+  placement: number | null;
+  forfeitedAt: string | null;
 }
 
 interface RoomInfo {
@@ -61,6 +68,10 @@ interface RoomInfo {
   startedAt: string | null;
   finishedAt: string | null;
   winnerId: string | null;
+  maxPlayers: number;
+  shuffle: boolean;
+  /** Null = the whole set. */
+  cardLimit: number | null;
 }
 
 interface SetOption {
@@ -76,19 +87,28 @@ interface Friend {
   avatarUrl: string | null;
 }
 
-/** Live progress columns of a battle_room_members row, as Realtime sends it. */
+/** A battle_room_members row as Realtime pushes it mid-game. */
 interface MemberRow {
   user_id: string;
   cleared: number;
   dont_know: number;
   first_try: number;
+  finished_at: string | null;
+  forfeited_at: string | null;
+  placement: number | null;
 }
 
+/** Progress fields that change mid-game, overlaid on the server's copy. */
+type LiveProgress = Pick<BattlePlayer, "cleared" | "finishedAt" | "forfeitedAt" | "placement">;
+
+const colorOf = (player: BattlePlayer): PlayerColor => playerColor(player.joinIndex);
+
 /**
- * A 1v1 battle room through all three phases -- lobby, game, results. Every
- * change to the room or its players is pushed by Supabase Realtime: in the
- * lobby and on phase changes the page re-renders from the server; mid-game the
- * opponent's progress is applied straight from the pushed row.
+ * A battle room (2-5 players) through all three phases -- lobby, game,
+ * results. Every change to the room or its players is pushed by Supabase
+ * Realtime: in the lobby and on phase changes the page re-renders from the
+ * server; mid-game other players' progress is applied straight from the
+ * pushed rows.
  */
 export default function BattleRoom({
   meId,
@@ -98,6 +118,7 @@ export default function BattleRoom({
   friends,
   inviteLink,
   answerMode,
+  pointsEarned = 0,
 }: {
   meId: string;
   room: RoomInfo;
@@ -106,12 +127,13 @@ export default function BattleRoom({
   friends: Friend[];
   inviteLink: string;
   answerMode: AnswerDisplayMode;
+  /** Reward points this battle earned the viewer (results only). */
+  pointsEarned?: number;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const me = players.find((p) => p.userId === meId);
-  const opponent = players.find((p) => p.userId !== meId) ?? null;
-  const [opponentLive, setOpponentLive] = useState<MemberRow | null>(null);
+  const [live, setLive] = useState<Record<string, LiveProgress>>({});
 
   useEffect(() => {
     const channel = supabase
@@ -138,7 +160,17 @@ export default function BattleRoom({
         (payload) => {
           const row = payload.new as Partial<MemberRow>;
           if (room.status === "in_progress") {
-            if (row.user_id && row.user_id !== meId) setOpponentLive(row as MemberRow);
+            if (row.user_id && row.user_id !== meId) {
+              setLive((current) => ({
+                ...current,
+                [row.user_id!]: {
+                  cleared: row.cleared ?? 0,
+                  finishedAt: row.finished_at ?? null,
+                  forfeitedAt: row.forfeited_at ?? null,
+                  placement: row.placement ?? null,
+                },
+              }));
+            }
           } else {
             router.refresh();
           }
@@ -160,7 +192,7 @@ export default function BattleRoom({
       <Lobby
         room={room}
         me={me}
-        opponent={opponent}
+        players={players}
         setOptions={setOptions}
         friends={friends}
         inviteLink={inviteLink}
@@ -173,81 +205,95 @@ export default function BattleRoom({
       <Game
         room={room}
         me={me}
-        opponent={opponent}
-        opponentCleared={opponentLive?.cleared ?? opponent?.cleared ?? 0}
+        // The server's copy, with any fresher Realtime progress laid over it.
+        others={players
+          .filter((p) => p.userId !== meId)
+          .map((p) => ({ ...p, ...live[p.userId] }))}
         answerMode={answerMode}
       />
     );
   }
 
-  return <Results room={room} me={me} opponent={opponent} />;
+  return <Results room={room} me={me} players={players} pointsEarned={pointsEarned} />;
 }
 
 // ---------------------------------------------------------------------------
 // Lobby
 // ---------------------------------------------------------------------------
 
-function PlayerSlot({ player, label }: { player: BattlePlayer | null; label: string }) {
-  if (!player) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 border border-dashed border-iron p-4 text-center">
-        <span className="loading loading-dots loading-sm opacity-60" aria-hidden="true" />
-        <p className="text-sm opacity-60">Waiting for an opponent</p>
-      </div>
-    );
-  }
+function PlayerCard({ player, isMe }: { player: BattlePlayer; isMe: boolean }) {
+  const color = colorOf(player);
   return (
-    <div className="flex flex-1 flex-col items-center gap-2 border border-iron p-4 text-center">
-      <Avatar url={player.avatarUrl} name={player.name} size="md" />
-      <p className="flex items-center gap-2 text-body-sm">
-        <span className="max-w-[9rem] truncate">{player.name}</span>
-        <OnlineDot userId={player.userId} />
-      </p>
-      <p className="text-xs opacity-60">
-        {label}
-        {!player.isHost && (player.isReady ? " · Ready" : " · Not ready")}
-      </p>
+    <div className="flex flex-col border border-iron">
+      <div className="h-2" style={{ backgroundColor: color.paint }} aria-hidden="true" />
+      <div className="flex items-center gap-3 p-3">
+        <Avatar url={player.avatarUrl} name={player.name} size="sm" />
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-2 text-body-sm">
+            <span className="truncate">{isMe ? `${player.name} (you)` : player.name}</span>
+            <OnlineDot userId={player.userId} />
+          </p>
+          <p className="text-xs opacity-60">
+            {player.isHost ? "Host" : player.isReady ? "Ready" : "Not ready"}
+          </p>
+        </div>
+      </div>
     </div>
   );
+}
+
+const CARD_PRESETS = [20, 50] as const;
+
+function describeOptions(shuffle: boolean, cardLimit: number | null) {
+  return `${shuffle ? "Shuffled" : "In set order"} · ${cardLimit ? `${cardLimit} cards` : "All cards"}`;
 }
 
 function Lobby({
   room,
   me,
-  opponent,
+  players,
   setOptions,
   friends,
   inviteLink,
 }: {
   room: RoomInfo;
   me: BattlePlayer;
-  opponent: BattlePlayer | null;
+  players: BattlePlayer[];
   setOptions: SetOption[];
   friends: Friend[];
   inviteLink: string;
 }) {
   const isHost = me.isHost;
-  const host = isHost ? me : opponent;
-  const guest = isHost ? opponent : me;
-  // The room's set comes from the server (pushed to the guest by Realtime when
-  // the host changes it); the host's own pick shows instantly while it saves.
-  const [setId, setOptimisticSetId] = useOptimistic(room.setId ?? "");
+  const others = players.filter((p) => !p.isHost);
+  const full = players.length >= room.maxPlayers;
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const chosen = setOptions.find((option) => option.id === setId);
-  const hostSets = setOptions.filter((option) => option.ownerId === room.hostId);
-  const guestSets = setOptions.filter((option) => option.ownerId !== room.hostId);
+  // The room's set and options come from the server (pushed to everyone by
+  // Realtime); the host's own changes show instantly while they save.
+  const [setId, setOptimisticSetId] = useOptimistic(room.setId ?? "");
+  const [options, setOptimisticOptions] = useOptimistic({
+    shuffle: room.shuffle,
+    cardLimit: room.cardLimit,
+  });
+  const [customDraft, setCustomDraft] = useState(
+    room.cardLimit && !CARD_PRESETS.includes(room.cardLimit as 20 | 50) ? String(room.cardLimit) : ""
+  );
+  const [customOpen, setCustomOpen] = useState(Boolean(customDraft));
 
-  const blocker = !guest
-    ? "Waiting for an opponent to join."
-    : !chosen
-      ? "Pick a set to battle with."
-      : chosen.cardCount === 0
-        ? "That set has no cards."
-        : !guest.isReady
-          ? `Waiting for ${guest.name} to get ready.`
-          : null;
+  const chosen = setOptions.find((option) => option.id === setId);
+  const notReady = others.filter((p) => !p.isReady);
+
+  const blocker =
+    players.length < 2
+      ? "Invite at least one more player."
+      : !chosen
+        ? "Pick a set to battle with."
+        : chosen.cardCount === 0
+          ? "That set has no cards."
+          : notReady.length > 0
+            ? `Waiting for ${notReady.map((p) => p.name).join(", ")} to get ready.`
+            : null;
 
   function pickSet(next: string) {
     setError(null);
@@ -258,6 +304,20 @@ function Lobby({
     });
   }
 
+  function saveOptions(next: { shuffle: boolean; cardLimit: number | null }) {
+    setError(null);
+    startTransition(async () => {
+      setOptimisticOptions(next);
+      const result = await setBattleOptions(room.id, next);
+      if ("error" in result && result.error) setError(result.error);
+    });
+  }
+
+  function applyCustom() {
+    const n = Math.floor(Number(customDraft));
+    if (n >= 1) saveOptions({ ...options, cardLimit: n });
+  }
+
   function start() {
     setError(null);
     startTransition(async () => {
@@ -265,6 +325,11 @@ function Lobby({
       if ("error" in result && result.error) setError(result.error);
     });
   }
+
+  // Sets grouped by owner: the host's first, then each other player's.
+  const owners = [players.find((p) => p.isHost), ...others].filter(
+    (p): p is BattlePlayer => Boolean(p)
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -277,15 +342,27 @@ function Lobby({
 
       {error && <div className="alert alert-error text-sm py-2">{error}</div>}
 
-      <div className="flex items-stretch gap-3">
-        <PlayerSlot player={host} label="Host" />
-        <span className="self-center text-subheading" aria-hidden="true">
-          vs
-        </span>
-        <PlayerSlot player={guest} label="Challenger" />
-      </div>
+      <section className="flex flex-col gap-2">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-subheading">Players</h2>
+          <span className="text-sm opacity-60 tabular-nums">
+            {players.length} / {room.maxPlayers}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {players.map((player) => (
+            <PlayerCard key={player.userId} player={player} isMe={player.userId === me.userId} />
+          ))}
+          {!full && (
+            <div className="flex items-center justify-center gap-2 border border-dashed border-iron p-3 text-sm opacity-60">
+              <span className="loading loading-dots loading-xs" aria-hidden="true" />
+              Waiting for players
+            </div>
+          )}
+        </div>
+      </section>
 
-      <div className="flex flex-col gap-2">
+      <section className="flex flex-col gap-2">
         <span className="label-text">Set</span>
         {isHost ? (
           <select
@@ -295,40 +372,116 @@ function Lobby({
             disabled={isPending}
           >
             <option value="">Pick a set…</option>
-            {/* Optgroups draw the line between the two players' sets. */}
-            <optgroup label="Your sets">
-              {hostSets.map((option) => (
-                <option key={option.id} value={option.id} disabled={option.cardCount === 0}>
-                  {option.name} ({option.cardCount})
-                </option>
-              ))}
-            </optgroup>
-            {guest && (
-              <optgroup label={`${guest.name}'s sets`}>
-                {guestSets.length === 0 ? (
-                  <option disabled>No sets to show</option>
-                ) : (
-                  guestSets.map((option) => (
-                    <option key={option.id} value={option.id} disabled={option.cardCount === 0}>
-                      {option.name} ({option.cardCount})
-                    </option>
-                  ))
-                )}
-              </optgroup>
-            )}
+            {/* One optgroup per player draws the line between their sets. */}
+            {owners.map((owner) => {
+              const sets = setOptions.filter((option) => option.ownerId === owner.userId);
+              return (
+                <optgroup key={owner.userId} label={owner.isHost ? "Your sets" : `${owner.name}'s sets`}>
+                  {sets.length === 0 ? (
+                    <option disabled>No sets to show</option>
+                  ) : (
+                    sets.map((option) => (
+                      <option key={option.id} value={option.id} disabled={option.cardCount === 0}>
+                        {option.name} ({option.cardCount})
+                      </option>
+                    ))
+                  )}
+                </optgroup>
+              );
+            })}
           </select>
         ) : (
           <p className="border border-iron px-4 py-3 text-body-sm">
             {chosen ? `${chosen.name} · ${chosen.cardCount} cards` : "The host is picking a set…"}
           </p>
         )}
-        <p className="text-xs opacity-60">
-          Clear every card in flashcards mode before your opponent to win. Missed cards go back into
-          your deck.
-        </p>
-      </div>
 
-      {/* The main action, centred: Ready for the challenger, Start for the host. */}
+        {/* Battle options: how the deck is drawn when the battle starts. */}
+        {isHost ? (
+          <details className="group border border-iron">
+            <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 select-none [&::-webkit-details-marker]:hidden">
+              <span className="text-body-sm">Battle options</span>
+              <span className="text-sm opacity-60">{describeOptions(options.shuffle, options.cardLimit)}</span>
+              <span
+                className="ml-auto text-lg leading-none transition-transform group-open:rotate-45"
+                aria-hidden="true"
+              >
+                +
+              </span>
+            </summary>
+            <div className="flex flex-col gap-4 border-t border-iron px-4 pt-3 pb-4">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="toggle toggle-sm toggle-primary"
+                  checked={options.shuffle}
+                  onChange={(e) => saveOptions({ ...options, shuffle: e.target.checked })}
+                />
+                <span>Shuffle card order</span>
+              </label>
+              <div className="flex flex-col gap-2">
+                <span className="label-text">How many cards?</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {[null, ...CARD_PRESETS].map((preset) => (
+                    <button
+                      key={preset ?? "all"}
+                      type="button"
+                      aria-pressed={!customOpen && options.cardLimit === preset}
+                      onClick={() => {
+                        setCustomOpen(false);
+                        saveOptions({ ...options, cardLimit: preset });
+                      }}
+                      className={`btn btn-sm ${!customOpen && options.cardLimit === preset ? "btn-primary" : "btn-outline"}`}
+                    >
+                      {preset ?? "All"}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    aria-pressed={customOpen}
+                    onClick={() => setCustomOpen(true)}
+                    className={`btn btn-sm ${customOpen ? "btn-primary" : "btn-outline"}`}
+                  >
+                    Custom
+                  </button>
+                  {customOpen && (
+                    <input
+                      type="number"
+                      min={1}
+                      inputMode="numeric"
+                      value={customDraft}
+                      placeholder="15"
+                      onChange={(e) => setCustomDraft(e.target.value)}
+                      // Saved when you're done typing, not on every keystroke.
+                      onBlur={applyCustom}
+                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), applyCustom())}
+                      className="input input-bordered input-sm w-20"
+                      aria-label="Custom number of cards"
+                    />
+                  )}
+                </div>
+                {chosen && options.cardLimit && options.cardLimit >= chosen.cardCount && (
+                  <p className="text-xs opacity-60">
+                    {chosen.name} has {chosen.cardCount} cards — all of them will be used.
+                  </p>
+                )}
+                {options.cardLimit && (!chosen || options.cardLimit < chosen.cardCount) && (
+                  <p className="text-xs opacity-60">A random {options.cardLimit} cards from the set.</p>
+                )}
+              </div>
+            </div>
+          </details>
+        ) : (
+          <p className="text-sm opacity-60">{describeOptions(options.shuffle, options.cardLimit)}</p>
+        )}
+
+        <p className="text-xs opacity-60">
+          First to clear every card in flashcards mode wins; everyone plays on for their place.
+          Missed cards go back into your deck.
+        </p>
+      </section>
+
+      {/* The main action, centred: Ready for players, Start for the host. */}
       <div className="flex flex-col items-center gap-2 py-2">
         {isHost ? (
           <>
@@ -360,22 +513,21 @@ function Lobby({
         )}
       </div>
 
-      {isHost && !guest && (
-        <InvitePanel roomId={room.id} friends={friends} inviteLink={inviteLink} code={room.code} />
-      )}
-
-      {/* Chat once there's someone to talk to; it carries on after the match. */}
-      {guest && host && (
-        <BattleChat
+      {isHost && !full && (
+        <InvitePanel
           roomId={room.id}
-          meId={me.userId}
-          names={{ [host.userId]: host.name, [guest.userId]: guest.name }}
+          friends={friends}
+          inviteLink={inviteLink}
+          code={room.code}
         />
       )}
 
+      {/* Chat once there's someone to talk to; it carries on after the match. */}
+      {players.length >= 2 && <BattleChat roomId={room.id} meId={me.userId} players={chatPlayers(players)} />}
+
       <form action={leaveBattleRoom.bind(null, room.id)} className="self-start">
         <SubmitButton
-          className="btn btn-ghost btn-sm"
+          className="btn btn-ghost btn-sm text-error"
           pendingText="Leaving…"
           confirmText={isHost ? "Close this room for everyone?" : undefined}
         >
@@ -383,6 +535,12 @@ function Lobby({
         </SubmitButton>
       </form>
     </div>
+  );
+}
+
+function chatPlayers(players: BattlePlayer[]) {
+  return Object.fromEntries(
+    players.map((p) => [p.userId, { name: p.name, color: colorOf(p) }])
   );
 }
 
@@ -417,7 +575,7 @@ function InvitePanel({
 
   return (
     <section className="flex flex-col gap-4 border-t border-iron pt-4">
-      <h2 className="text-subheading">Invite someone</h2>
+      <h2 className="text-subheading">Invite players</h2>
       {error && <div className="alert alert-error text-sm py-2">{error}</div>}
 
       <div className="flex flex-col">
@@ -478,67 +636,68 @@ function useElapsed(since: string | null, running: boolean) {
 }
 
 /**
- * The race: your progress as the main bar, the opponent's as a thinner, lighter
- * bar right under it, so a glance shows who's ahead.
+ * The race: one bar per player in their colour, yours first and thickest,
+ * with a one-line read of where you stand.
  */
 function RaceProgress({
+  me,
   mine,
-  theirs,
+  others,
   total,
-  opponentName,
 }: {
+  me: BattlePlayer;
   mine: number;
-  theirs: number;
+  others: BattlePlayer[];
   total: number;
-  opponentName: string;
 }) {
   const percent = (value: number) => `${total > 0 ? Math.min(100, (value / total) * 100) : 0}%`;
-  const lead = mine - theirs;
+  const rows = [{ player: me, cleared: mine, isMe: true }, ...others.map((p) => ({ player: p, cleared: p.cleared, isMe: false }))];
+  const ahead = others.filter((p) => p.cleared > mine).length;
+  const position = ahead + 1;
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex justify-between gap-2 text-xs">
-        <span>You</span>
-        <span className="tabular-nums">
-          {mine} / {total}
-        </span>
-      </div>
-      <div
-        role="progressbar"
-        aria-label="Your progress"
-        aria-valuemin={0}
-        aria-valuemax={total}
-        aria-valuenow={mine}
-        className="h-2.5 w-full border border-iron"
-      >
-        <div className="h-full bg-iron transition-[width] duration-300" style={{ width: percent(mine) }} />
-      </div>
-      <div
-        role="progressbar"
-        aria-label={`${opponentName}'s progress`}
-        aria-valuemin={0}
-        aria-valuemax={total}
-        aria-valuenow={theirs}
-        className="h-1.5 w-full border border-iron/40"
-      >
-        <div
-          className="h-full bg-iron/40 transition-[width] duration-500"
-          style={{ width: percent(theirs) }}
-        />
-      </div>
-      <div className="flex justify-between gap-2 text-xs opacity-70">
-        <span className="truncate">{opponentName}</span>
-        <span className="tabular-nums">
-          {theirs} / {total}
-        </span>
-      </div>
-      <p className="text-xs opacity-60" aria-live="polite">
-        {lead > 0
-          ? `You're ahead by ${lead}`
-          : lead < 0
-            ? `${opponentName} is ahead by ${-lead}`
-            : "Neck and neck"}
-      </p>
+    <div className="flex flex-col gap-2">
+      {rows.map(({ player, cleared, isMe }) => {
+        const color = colorOf(player);
+        const status = player.forfeitedAt
+          ? "gave up"
+          : player.placement
+            ? ordinal(player.placement)
+            : `${cleared} / ${total}`;
+        return (
+          <div key={player.userId} className={`flex flex-col gap-1 ${player.forfeitedAt ? "opacity-50" : ""}`}>
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="flex min-w-0 items-center gap-2">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full border border-iron"
+                  style={{ backgroundColor: color.paint }}
+                  aria-hidden="true"
+                />
+                <span className="truncate">{isMe ? "You" : player.name}</span>
+              </span>
+              <span className="tabular-nums opacity-70">{status}</span>
+            </div>
+            <div
+              role="progressbar"
+              aria-label={`${isMe ? "Your" : `${player.name}'s`} progress`}
+              aria-valuemin={0}
+              aria-valuemax={total}
+              aria-valuenow={cleared}
+              className={`w-full border border-iron ${isMe ? "h-3" : "h-1.5"}`}
+            >
+              <div
+                className="h-full transition-[width] duration-300"
+                style={{ width: percent(cleared), backgroundColor: color.paint }}
+              />
+            </div>
+          </div>
+        );
+      })}
+      {others.length > 0 && (
+        <p className="text-xs opacity-60" aria-live="polite">
+          {position === 1 ? "You're in the lead" : `You're in ${ordinal(position)} place`}
+        </p>
+      )}
     </div>
   );
 }
@@ -546,16 +705,15 @@ function RaceProgress({
 function Game({
   room,
   me,
-  opponent,
-  opponentCleared,
+  others,
   answerMode,
 }: {
   room: RoomInfo;
   me: BattlePlayer;
-  opponent: BattlePlayer | null;
-  opponentCleared: number;
+  others: BattlePlayer[];
   answerMode: AnswerDisplayMode;
 }) {
+  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const cardsById = useMemo(
     () => Object.fromEntries(room.deck.map((card) => [card.id, card])),
@@ -572,13 +730,11 @@ function Game({
   const writes = useRef<Promise<unknown>>(Promise.resolve());
 
   const done = state.currentIndex >= state.queue.length;
-  const opponentName = opponent?.name ?? "Your opponent";
-  // The first to clear the deck wins, but the battle runs until both are done.
-  const iWon = room.winnerId === me.userId;
-  const theyWon = Boolean(room.winnerId) && !iWon;
   const elapsed = useElapsed(room.startedAt, !done);
   const mine = progressStats(state.queue);
   const entry = state.queue[state.currentIndex];
+  const winner = room.winnerId ? others.find((p) => p.userId === room.winnerId) : null;
+  const stillPlaying = others.filter((p) => !p.finishedAt && !p.forfeitedAt);
 
   function grade(result: Result) {
     if (!entry || entry.type !== "card") return;
@@ -605,10 +761,11 @@ function Game({
           .eq("room_id", room.id)
           .eq("user_id", me.userId);
         if (saveError) throw saveError;
-        // Claims the win; the room update then moves both screens to results.
         if (finished) {
+          // Records my place; then fetch it (it isn't pushed to me by Realtime).
           const { error: finishError } = await supabase.rpc("finish_battle", { p_room: room.id });
           if (finishError) throw finishError;
+          router.refresh();
         }
       })
       .catch(() => setError("Couldn't sync your progress — check your connection."));
@@ -629,27 +786,22 @@ function Game({
             confirmText={
               done
                 ? undefined
-                : theyWon
-                  ? `Stop here? ${opponentName} has already won — this ends the battle.`
-                  : "Forfeit the battle? Your opponent will win."
+                : winner
+                  ? `Stop here? ${winner.name} has already won — you'll be listed as giving up.`
+                  : "Give up the battle? You'll be listed as giving up."
             }
           >
             {/* Once you've finished, leaving doesn't affect the battle. */}
-            {done ? "Leave" : theyWon ? "Give up" : "Forfeit"}
+            {done ? "Leave" : winner ? "Give up" : "Forfeit"}
           </SubmitButton>
         </form>
       </div>
 
-      <RaceProgress
-        mine={mine.cleared}
-        theirs={opponentCleared}
-        total={total}
-        opponentName={opponent?.name ?? "Opponent"}
-      />
+      <RaceProgress me={me} mine={mine.cleared} others={others} total={total} />
 
-      {theyWon && !done && (
+      {winner && !done && (
         <p className="border border-iron px-3 py-2 text-sm" role="status">
-          {opponentName} finished first — keep going to complete your deck.
+          {winner.name} finished first — keep going for your place.
         </p>
       )}
 
@@ -659,22 +811,23 @@ function Game({
             className="flex flex-1 flex-col items-center justify-center gap-3 text-center"
             role="status"
           >
-            {iWon ? (
+            {me.placement ? (
               <>
-                <p className="display">First!</p>
+                <p className="display">{me.placement === 1 ? "First!" : `${ordinal(me.placement)}!`}</p>
                 <p className="text-subheading">You cleared the deck in {formatStudyTime(elapsed)}.</p>
-                <p className="flex items-center gap-2 text-sm opacity-60">
-                  <span className="loading loading-dots loading-xs" aria-hidden="true" />
-                  Waiting for {opponentName} to finish — results appear when they&apos;re done.
-                </p>
+                {stillPlaying.length > 0 && (
+                  <p className="flex items-center gap-2 text-sm opacity-60">
+                    <span className="loading loading-dots loading-xs" aria-hidden="true" />
+                    Waiting for {stillPlaying.map((p) => p.name).join(", ")} — results appear when
+                    everyone&apos;s done.
+                  </p>
+                )}
               </>
             ) : (
               <>
                 <span className="loading loading-spinner loading-md" aria-hidden="true" />
                 <p className="text-subheading">Deck cleared!</p>
-                <p className="text-sm opacity-60">
-                  {theyWon ? "Wrapping up the battle…" : "Checking who finished first…"}
-                </p>
+                <p className="text-sm opacity-60">Recording your place…</p>
               </>
             )}
           </div>
@@ -701,75 +854,84 @@ function Game({
 function Results({
   room,
   me,
-  opponent,
+  players,
+  pointsEarned,
 }: {
   room: RoomInfo;
   me: BattlePlayer;
-  opponent: BattlePlayer | null;
+  players: BattlePlayer[];
+  pointsEarned: number;
 }) {
-  const won = room.winnerId === me.userId;
   const total = room.deck.length;
-  const winner = [me, opponent].find((p) => p?.userId === room.winnerId) ?? null;
-  const runnerUp = [me, opponent].find((p) => p && p.userId !== room.winnerId) ?? null;
-  // The winner never cleared the deck: the other player left before anyone finished.
-  const forfeit = Boolean(winner && !winner.finishedAt);
   const secondsBetween = (from: string | null, to: string | null) =>
     from && to ? Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 1000)) : null;
-  const winningTime = secondsBetween(room.startedAt, winner?.finishedAt ?? null);
 
-  const columns = [me, opponent].filter((p): p is BattlePlayer => Boolean(p));
+  // Placed players in order, then anyone who gave up (most cards first).
+  const ranked = [...players].sort(
+    (a, b) =>
+      (a.placement ?? Infinity) - (b.placement ?? Infinity) ||
+      Number(Boolean(a.forfeitedAt)) - Number(Boolean(b.forfeitedAt)) ||
+      b.cleared - a.cleared
+  );
+  const winner = players.find((p) => p.userId === room.winnerId) ?? null;
+  const headline =
+    me.placement === 1 ? "Victory." : me.placement ? `${ordinal(me.placement)}.` : "Defeat.";
+  const others = players.filter((p) => p.userId !== me.userId);
 
   return (
     <div className="flex flex-col gap-6 py-4">
-      <h1 className="display">{won ? "Victory." : "Defeat."}</h1>
+      <h1 className="display">{headline}</h1>
       <hr className="hairline" />
       <p className="text-subheading">
-        {forfeit
-          ? `${won ? (opponent?.name ?? "Your opponent") : "You"} left the battle.`
+        {winner?.finishedAt
+          ? `${winner.userId === me.userId ? "You" : winner.name} cleared ${total} cards in ${formatStudyTime(secondsBetween(room.startedAt, winner.finishedAt) ?? 0)}.`
           : winner
-            ? `${winner.userId === me.userId ? "You" : winner.name} cleared ${total} cards in ${formatStudyTime(winningTime ?? 0)}.`
+            ? `Everyone else gave up — ${winner.userId === me.userId ? "you win" : `${winner.name} wins`}.`
             : "The battle is over."}
-        {/* The runner-up stopped before clearing the deck (gave up after the win). */}
-        {!forfeit && runnerUp && !runnerUp.finishedAt && (
-          <span className="block text-body-sm opacity-70 mt-2">
-            {runnerUp.userId === me.userId ? "You" : runnerUp.name} stopped at {runnerUp.cleared} /{" "}
-            {total}.
-          </span>
-        )}
       </p>
+      {pointsEarned > 0 && (
+        <p className="self-start rounded-full bg-iron px-4 py-1.5 text-body-sm text-concrete">
+          +{pointsEarned} points
+        </p>
+      )}
 
-      <div className="grid grid-cols-2 border-t border-l border-iron">
-        {columns.map((player) => {
+      <ol className="flex flex-col border-t border-iron">
+        {ranked.map((player) => {
+          const color = colorOf(player);
           const time = secondsBetween(room.startedAt, player.finishedAt);
           return (
-            <div key={player.userId} className="flex flex-col gap-3 border-b border-r border-iron p-4">
-              <div className="flex items-center gap-2">
-                <Avatar url={player.avatarUrl} name={player.name} size="sm" />
-                <p className="min-w-0 truncate text-body-sm">
+            <li key={player.userId} className="flex items-center gap-3 border-b border-iron py-3">
+              <span
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm"
+                style={{ backgroundColor: color.paint, color: color.ink }}
+              >
+                {player.placement ?? "–"}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-body-sm">
                   {player.userId === me.userId ? "You" : player.name}
+                  {player.forfeitedAt && <span className="opacity-60"> · gave up</span>}
+                </p>
+                <p className="text-xs opacity-60">
+                  {player.cleared}/{total} cleared · {player.firstTry} right first time ·{" "}
+                  {player.dontKnow} don&apos;t know
                 </p>
               </div>
-              {player.userId === room.winnerId && (
-                <span className="self-start rounded-full bg-iron px-2 py-0.5 text-xs text-concrete">
-                  Winner
-                </span>
-              )}
-              <dl className="flex flex-col gap-2 text-sm">
-                <Stat label="Cleared" value={`${player.cleared} / ${total}`} />
-                <Stat label="Right first time" value={player.firstTry} />
-                <Stat label="Don't know" value={player.dontKnow} />
-                <Stat label="Time" value={time !== null ? formatStudyTime(time) : "—"} />
-              </dl>
-            </div>
+              <span className="shrink-0 text-body-sm tabular-nums">
+                {time !== null ? formatStudyTime(time) : "—"}
+              </span>
+            </li>
           );
         })}
-      </div>
+      </ol>
 
       <div className="flex flex-wrap gap-2">
-        {room.setId && opponent && (
+        {room.setId && others.length > 0 && (
           <form action={createBattleRoom}>
             <input type="hidden" name="set_id" value={room.setId} />
-            <input type="hidden" name="invite" value={opponent.userId} />
+            {others.map((p) => (
+              <input key={p.userId} type="hidden" name="invite" value={p.userId} />
+            ))}
             <SubmitButton className="btn btn-primary" pendingText="Creating room…">
               Rematch
             </SubmitButton>
@@ -780,23 +942,14 @@ function Results({
         </LinkButton>
       </div>
 
-      {opponent && (
+      {others.length > 0 && (
         <BattleChat
           roomId={room.id}
           meId={me.userId}
-          names={{ [me.userId]: me.name, [opponent.userId]: opponent.name }}
+          players={chatPlayers(players)}
           title="Post-match chat"
         />
       )}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="flex items-baseline justify-between gap-2">
-      <dt className="opacity-60">{label}</dt>
-      <dd className="text-body-sm tabular-nums">{value}</dd>
     </div>
   );
 }

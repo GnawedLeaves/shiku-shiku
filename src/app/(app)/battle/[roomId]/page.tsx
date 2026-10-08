@@ -54,7 +54,21 @@ export default async function BattleRoomPage({
   const chosenSet = (setOptions ?? []).find((option) => option.id === room.set_id);
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
 
-  const players: BattlePlayer[] = (members ?? []).map((m) => ({
+  // Points this battle earned the viewer (rewards skeleton, migration 0011).
+  const { data: rewards } =
+    room.status === "finished"
+      ? await supabase
+          .from("reward_ledger")
+          .select("points")
+          .eq("source", "battle")
+          .eq("source_id", room.id)
+          .eq("user_id", user.id)
+      : { data: [] };
+  const pointsEarned = (rewards ?? []).reduce((sum, row) => sum + row.points, 0);
+
+  // Members come back in join order, which fixes each player's colour.
+  const players: BattlePlayer[] = (members ?? []).map((m, joinIndex) => ({
+    joinIndex,
     userId: m.user_id,
     name: profileById.get(m.user_id)?.display_name ?? "Player",
     avatarUrl: profileById.get(m.user_id)?.avatar_url ?? null,
@@ -66,6 +80,8 @@ export default async function BattleRoomPage({
     dontKnow: m.dont_know,
     firstTry: m.first_try,
     finishedAt: m.finished_at,
+    placement: m.placement ?? null,
+    forfeitedAt: m.forfeited_at ?? null,
   }));
 
   return (
@@ -85,7 +101,11 @@ export default async function BattleRoomPage({
         startedAt: room.started_at,
         finishedAt: room.finished_at,
         winnerId: room.winner_id,
+        maxPlayers: room.max_players ?? 5,
+        shuffle: room.shuffle ?? true,
+        cardLimit: room.card_limit ?? null,
       }}
+      pointsEarned={pointsEarned}
       players={players}
       setOptions={(setOptions ?? []).map((o) => ({
         id: o.id,

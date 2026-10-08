@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import type { PlayerColor } from "@/lib/battle/players";
 
 interface ChatMessage {
   id: string;
@@ -47,13 +48,13 @@ const byTime = (a: ChatMessage, b: ChatMessage) => a.createdAt.localeCompare(b.c
 export default function BattleChat({
   roomId,
   meId,
-  names,
+  players,
   title = "Chat",
 }: {
   roomId: string;
   meId: string;
-  /** Display names by user id. */
-  names: Record<string, string>;
+  /** Each player's name and identity colour, by user id. */
+  players: Record<string, { name: string; color: PlayerColor }>;
   title?: string;
 }) {
   const supabase = useMemo(() => createClient(), []);
@@ -183,22 +184,34 @@ export default function BattleChat({
         )}
         {messages.map((message) => {
           const own = message.userId === meId;
+          const color = players[message.userId]?.color;
           return (
             <div
               key={message.id}
               className={`flex max-w-[80%] flex-col gap-0.5 ${own ? "self-end items-end" : "self-start items-start"}`}
             >
               <p className="text-[11px] opacity-60">
-                {own ? "You" : (names[message.userId] ?? "Player")} ·{" "}
+                {own ? "You" : (players[message.userId]?.name ?? "Player")} ·{" "}
                 {new Date(message.createdAt).toLocaleTimeString(undefined, {
                   hour: "numeric",
                   minute: "2-digit",
                 })}
               </p>
+              {/* Each player's bubbles carry their colour: filled for your own,
+                  a thick border in theirs for everyone else. */}
               <p
-                className={`whitespace-pre-wrap px-3 py-2 text-sm leading-snug [overflow-wrap:anywhere] ${
-                  own ? "bg-iron text-concrete" : "border border-iron"
-                } ${message.status === "sending" ? "opacity-60" : ""}`}
+                className={`whitespace-pre-wrap border-2 px-3 py-2 text-sm leading-snug [overflow-wrap:anywhere] ${
+                  message.status === "sending" ? "opacity-60" : ""
+                }`}
+                style={
+                  own
+                    ? {
+                        backgroundColor: color?.paint ?? "var(--color-iron)",
+                        borderColor: color?.paint ?? "var(--color-iron)",
+                        color: color?.ink ?? "var(--color-concrete)",
+                      }
+                    : { borderColor: color?.paint ?? "var(--color-iron)" }
+                }
               >
                 {message.body}
               </p>

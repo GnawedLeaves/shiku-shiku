@@ -8,6 +8,13 @@ export type FriendshipStatus = "pending" | "accepted" | "declined";
 export type BattleRoomStatus = "lobby" | "in_progress" | "finished";
 export type BattleInviteStatus = "pending" | "accepted" | "declined";
 
+/** Points balance and medals, from my_reward_summary(). */
+export interface RewardSummary {
+  points: number;
+  medals: { id: string; name: string }[];
+  next_medal: { id: string; name: string; threshold: number } | null;
+}
+
 /** One card of a battle's deck, snapshotted when the battle starts. */
 export interface BattleCard {
   id: string;
@@ -376,6 +383,9 @@ export interface Database {
           winner_id: string | null;
           set_name: string | null;
           card_count: number | null;
+          max_players: number;
+          shuffle: boolean;
+          card_limit: number | null;
         };
         Insert: {
           id?: string;
@@ -391,6 +401,9 @@ export interface Database {
           winner_id?: string | null;
           set_name?: string | null;
           card_count?: number | null;
+          max_players?: number;
+          shuffle?: boolean;
+          card_limit?: number | null;
         };
         Update: {
           id?: string;
@@ -406,6 +419,9 @@ export interface Database {
           winner_id?: string | null;
           set_name?: string | null;
           card_count?: number | null;
+          max_players?: number;
+          shuffle?: boolean;
+          card_limit?: number | null;
         };
         Relationships: [];
       };
@@ -422,6 +438,8 @@ export interface Database {
           dont_know: number;
           first_try: number;
           finished_at: string | null;
+          placement: number | null;
+          forfeited_at: string | null;
         };
         Insert: {
           room_id: string;
@@ -435,6 +453,8 @@ export interface Database {
           dont_know?: number;
           first_try?: number;
           finished_at?: string | null;
+          placement?: number | null;
+          forfeited_at?: string | null;
         };
         Update: {
           room_id?: string;
@@ -448,6 +468,8 @@ export interface Database {
           dont_know?: number;
           first_try?: number;
           finished_at?: string | null;
+          placement?: number | null;
+          forfeited_at?: string | null;
         };
         Relationships: [
           {
@@ -458,6 +480,20 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      reward_ledger: {
+        Row: {
+          id: string;
+          user_id: string;
+          points: number;
+          source: string;
+          source_id: string | null;
+          reason: string;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
       };
       battle_messages: {
         Row: {
@@ -553,6 +589,10 @@ export interface Database {
       forfeit_battle: {
         Args: { p_room: string };
         Returns: undefined;
+      };
+      my_reward_summary: {
+        Args: Record<string, never>;
+        Returns: RewardSummary;
       };
       friend_profile_sets: {
         Args: { p_user: string };

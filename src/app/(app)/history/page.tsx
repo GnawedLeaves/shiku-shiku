@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
+import { ordinal } from "@/lib/battle/players";
 
 function formatDuration(seconds: number | null): string {
   if (!seconds || seconds < 1) return "—";
@@ -177,8 +178,11 @@ async function StudyHistory({ userId }: { userId: string }) {
 interface BattleRow {
   roomId: string;
   won: boolean;
-  forfeit: boolean;
-  opponentName: string;
+  /** 1 = first to clear the deck; null if you gave up. */
+  placement: number | null;
+  gaveUp: boolean;
+  playerCount: number;
+  opponentsLabel: string;
   setName: string;
   total: number;
   cleared: number;
@@ -195,7 +199,7 @@ async function BattleHistory({ userId }: { userId: string }) {
   const { data: mine, error } = await supabase
     .from("battle_room_members")
     .select(
-      "room_id, cleared, dont_know, first_try, finished_at, battle_rooms!inner(status, winner_id, set_name, card_count, started_at, finished_at)"
+      "room_id, cleared, dont_know, first_try, finished_at, placement, forfeited_at, battle_rooms!inner(status, winner_id, set_name, card_count, started_at, finished_at)"
     )
     .eq("user_id", userId)
     .eq("battle_rooms.status", "finished");
@@ -203,7 +207,7 @@ async function BattleHistory({ userId }: { userId: string }) {
   if (error) {
     return (
       <div className="alert alert-error text-sm py-2">
-        <span>Couldn&apos;t load battles. Has migration 0008 been run?</span>
+        <span>Couldn&apos;t load battles. Have migrations 0008 and 0011 been run?</span>
       </div>
     );
   }
@@ -212,7 +216,7 @@ async function BattleHistory({ userId }: { userId: string }) {
   const { data: others } = roomIds.length
     ? await supabase
         .from("battle_room_members")
-        .select("room_id, user_id, finished_at")
+        .select("room_id, user_id")
         .in("room_id", roomIds)
         .neq("user_id", userId)
     : { data: [] };
@@ -222,22 +226,29 @@ async function BattleHistory({ userId }: { userId: string }) {
     : { data: [] };
 
   const nameById = new Map((profiles ?? []).map((p) => [p.id, p.display_name ?? "Player"]));
-  const opponentByRoom = new Map((others ?? []).map((o) => [o.room_id, o]));
+  const opponentsByRoom = new Map<string, string[]>();
+  for (const o of others ?? []) {
+    opponentsByRoom.set(o.room_id, [...(opponentsByRoom.get(o.room_id) ?? []), o.user_id]);
+  }
   const seconds = (from: string | null, to: string | null) =>
     from && to ? Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 1000)) : null;
 
   const battles: BattleRow[] = (mine ?? [])
     .map((row) => {
       const room = row.battle_rooms;
-      const opponent = opponentByRoom.get(row.room_id);
-      const won = room.winner_id === userId;
-      const winnerFinishedAt = won ? row.finished_at : (opponent?.finished_at ?? null);
+      const opponentNames = (opponentsByRoom.get(row.room_id) ?? []).map(
+        (id) => nameById.get(id) ?? "Player"
+      );
       return {
         roomId: row.room_id,
-        won,
-        // The winner never cleared the deck: the other player left.
-        forfeit: !winnerFinishedAt,
-        opponentName: opponent ? (nameById.get(opponent.user_id) ?? "Player") : "Player",
+        won: room.winner_id === userId,
+        placement: row.placement,
+        gaveUp: Boolean(row.forfeited_at),
+        playerCount: opponentNames.length + 1,
+        opponentsLabel:
+          opponentNames.length <= 2
+            ? opponentNames.join(" & ") || "Player"
+            : `${opponentNames[0]} + ${opponentNames.length - 1} others`,
         setName: room.set_name ?? "Unknown set",
         total: room.card_count ?? 0,
         cleared: row.cleared,
@@ -285,7 +296,7 @@ async function BattleHistory({ userId }: { userId: string }) {
           >
             <div className="card-body p-4 gap-1">
               <div className="flex items-start justify-between gap-3">
-                <span className="text-body-sm truncate min-w-0">vs {battle.opponentName}</span>
+                <span className="text-body-sm truncate min-w-0">vs {battle.opponentsLabel}</span>
                 <span className="text-xs opacity-50 truncate max-w-[45%] shrink-0">
                   {battle.setName}
                 </span>
@@ -306,8 +317,13 @@ async function BattleHistory({ userId }: { userId: string }) {
                 <span
                   className={`badge badge-sm shrink-0 ${battle.won ? "bg-iron text-concrete" : "badge-outline"}`}
                 >
-                  {battle.won ? "Won" : "Lost"}
-                  {battle.forfeit && " · forfeit"}
+                  {battle.gaveUp
+                    ? "Gave up"
+                    : battle.placement
+                      ? `${ordinal(battle.placement)} of ${battle.playerCount}`
+                      : battle.won
+                        ? "Won"
+                        : "Lost"}
                 </span>
               </div>
             </div>
