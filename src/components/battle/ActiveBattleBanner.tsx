@@ -14,6 +14,8 @@ interface ActiveBattle {
   isHost: boolean;
   /** Already cleared the deck and waiting on the opponent. */
   finished: boolean;
+  /** Gave up, and waiting for the others to finish. */
+  gaveUp: boolean;
   opponentName: string | null;
 }
 
@@ -37,7 +39,7 @@ export default function ActiveBattleBanner({ userId }: { userId: string }) {
     (async () => {
       const { data } = await supabase
         .from("battle_room_members")
-        .select("room_id, finished_at, battle_rooms!inner(status, host_id, created_at)")
+        .select("room_id, finished_at, forfeited_at, battle_rooms!inner(status, host_id, created_at)")
         .eq("user_id", userId)
         .in("battle_rooms.status", ["lobby", "in_progress"]);
 
@@ -71,6 +73,7 @@ export default function ActiveBattleBanner({ userId }: { userId: string }) {
           status: row.battle_rooms.status,
           isHost: row.battle_rooms.host_id === userId,
           finished: Boolean(row.finished_at),
+          gaveUp: Boolean(row.forfeited_at),
           // "Aiko", or "Aiko + 2 others" in a bigger room.
           opponentName: opponentId
             ? `${profile?.display_name ?? "a friend"}${extra ? ` + ${extra} other${extra === 1 ? "" : "s"}` : ""}`
@@ -107,19 +110,21 @@ export default function ActiveBattleBanner({ userId }: { userId: string }) {
 
   const inProgress = battle.status === "in_progress";
   const vs = battle.opponentName ? ` with ${battle.opponentName}` : "";
-  // A player who already finished can leave without affecting the battle.
-  const forfeits = inProgress && !battle.finished;
+  // A player who already finished (or gave up) can leave without affecting the battle.
+  const forfeits = inProgress && !battle.finished && !battle.gaveUp;
   const leaveLabel = forfeits ? "Forfeit" : inProgress ? "Leave" : battle.isHost ? "Close room" : "Leave";
 
   return (
     <div role="status" className="border-t border-iron bg-the-red text-iron">
       <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 sm:px-6">
         <p className="min-w-0 flex-1 text-body-sm">
-          {battle.finished
-            ? "You've finished — waiting for the others to finish."
-            : inProgress
-              ? `Your battle${vs} is still going.`
-              : `You're still in a battle room${vs}.`}
+          {battle.gaveUp && inProgress
+            ? "You gave up — waiting for the others to finish."
+            : battle.finished
+              ? "You've finished — waiting for the others to finish."
+              : inProgress
+                ? `Your battle${vs} is still going.`
+                : `You're still in a battle room${vs}.`}
         </p>
         <div className="flex shrink-0 gap-2">
           <LinkButton href={`/battle/${battle.roomId}`} className="btn btn-primary btn-xs">

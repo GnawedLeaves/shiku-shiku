@@ -172,9 +172,33 @@ export async function startBattle(roomId: string) {
 }
 
 /**
- * Leaves the room. Mid-battle that's a forfeit (the other player wins and
- * both rows stay for the results screen); in the lobby the host closing the
- * room removes it for both players.
+ * Gives up mid-battle but stays in the room: you're listed last and wait on
+ * the others, then see the results with everyone else.
+ */
+export async function forfeitBattle(roomId: string) {
+  const supabase = await createClient();
+  await supabase.rpc("forfeit_battle", { p_room: roomId });
+  revalidatePath(`/battle/${roomId}`);
+}
+
+/**
+ * Rematch from the results: a new lobby with the same set and options and
+ * everyone who hasn't left already in it. The others follow automatically
+ * (see BattleRoom). If someone beat you to it, this joins their rematch.
+ */
+export async function rematchBattle(roomId: string) {
+  const supabase = await createClient();
+  const { data: nextId, error } = await supabase.rpc("rematch_battle", { p_room: roomId });
+  if (error || !nextId) return { error: error?.message ?? "Couldn't start a rematch" };
+
+  revalidatePath("/battle");
+  redirect(`/battle/${nextId}`);
+}
+
+/**
+ * Leaves the room. Mid-battle that's a forfeit (the rows stay for the results
+ * screen); in the lobby the host closing the room removes it for everyone;
+ * after the battle it's recorded so the others can see you've gone.
  */
 async function leaveRoom(roomId: string) {
   const supabase = await createClient();
@@ -199,6 +223,12 @@ async function leaveRoom(roomId: string) {
         .eq("room_id", roomId)
         .eq("user_id", user.id);
     }
+  } else if (room?.status === "finished") {
+    await supabase
+      .from("battle_room_members")
+      .update({ left_at: new Date().toISOString() })
+      .eq("room_id", roomId)
+      .eq("user_id", user.id);
   }
 
   revalidatePath("/battle");

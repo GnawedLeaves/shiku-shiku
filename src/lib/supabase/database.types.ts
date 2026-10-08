@@ -386,6 +386,7 @@ export interface Database {
           max_players: number;
           shuffle: boolean;
           card_limit: number | null;
+          rematch_room_id: string | null;
         };
         Insert: {
           id?: string;
@@ -404,6 +405,7 @@ export interface Database {
           max_players?: number;
           shuffle?: boolean;
           card_limit?: number | null;
+          rematch_room_id?: string | null;
         };
         Update: {
           id?: string;
@@ -422,6 +424,7 @@ export interface Database {
           max_players?: number;
           shuffle?: boolean;
           card_limit?: number | null;
+          rematch_room_id?: string | null;
         };
         Relationships: [];
       };
@@ -440,6 +443,7 @@ export interface Database {
           finished_at: string | null;
           placement: number | null;
           forfeited_at: string | null;
+          left_at: string | null;
         };
         Insert: {
           room_id: string;
@@ -455,6 +459,7 @@ export interface Database {
           finished_at?: string | null;
           placement?: number | null;
           forfeited_at?: string | null;
+          left_at?: string | null;
         };
         Update: {
           room_id?: string;
@@ -470,6 +475,7 @@ export interface Database {
           finished_at?: string | null;
           placement?: number | null;
           forfeited_at?: string | null;
+          left_at?: string | null;
         };
         Relationships: [
           {
@@ -589,6 +595,10 @@ export interface Database {
       forfeit_battle: {
         Args: { p_room: string };
         Returns: undefined;
+      };
+      rematch_battle: {
+        Args: { p_room: string };
+        Returns: string;
       };
       my_reward_summary: {
         Args: Record<string, never>;

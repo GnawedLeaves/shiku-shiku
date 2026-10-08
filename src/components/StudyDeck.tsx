@@ -53,6 +53,16 @@ const SWIPE_DISTANCE = 100;
 const SWIPE_VELOCITY = 500;
 
 /**
+ * The question's type size, stepped down for longer text so it fits the card
+ * instead of overflowing it on a short screen.
+ */
+function questionSize(text: string): string {
+  if (text.length > 60) return "text-[clamp(20px,5.5vw,30px)] leading-tight";
+  if (text.length > 24) return "text-[clamp(24px,7.5vw,42px)] leading-[1.05]";
+  return "text-[clamp(32px,11vw,60px)] leading-[0.9]";
+}
+
+/**
  * How many paper edges to draw for `behind` cards still to come. Grows with
  * the square root so 100 cards reads clearly thicker than 50 without the stack
  * swallowing the screen, and thins out one-per-card near the end.
@@ -267,8 +277,12 @@ function FlipCard({
           {/* Front: the question */}
           <CardFace>
             <p className="text-xs opacity-60">Question</p>
-            <div className="flex flex-1 items-center justify-center">
-              <h2 className="text-center text-[clamp(32px,11vw,60px)] leading-[0.9] [overflow-wrap:anywhere]">
+            {/* Centred with auto margins, not justify-center: when the text is
+                taller than the card it then scrolls instead of being clipped. */}
+            <div className="flex flex-1 flex-col">
+              <h2
+                className={`my-auto text-center [overflow-wrap:anywhere] ${questionSize(card.question)}`}
+              >
                 {card.question}
               </h2>
             </div>
@@ -295,12 +309,18 @@ function FlipCard({
             />
 
             <p className="relative text-body-sm opacity-60 break-words">{card.question}</p>
-            <div className="relative flex flex-1 flex-col items-center justify-center gap-2 py-4 text-center">
-              <p className="text-xs opacity-60">Answer</p>
-              <p className="text-[clamp(22px,7vw,34px)] leading-tight tracking-tight [overflow-wrap:anywhere]">
-                {formatAnswer(card, answerMode)}
-              </p>
-              {card.answer_kanji && <p className="text-body-sm opacity-70">{card.answer_kanji}</p>}
+            <div className="relative flex flex-1 flex-col py-4 text-center">
+              <div className="my-auto flex flex-col items-center gap-2">
+                <p className="text-xs opacity-60">Answer</p>
+                <p className="text-[clamp(22px,7vw,34px)] leading-tight tracking-tight [overflow-wrap:anywhere]">
+                  {formatAnswer(card, answerMode)}
+                </p>
+                {card.answer_kanji && (
+                  <p className="text-body-sm opacity-70 [overflow-wrap:anywhere]">
+                    {card.answer_kanji}
+                  </p>
+                )}
+              </div>
             </div>
             {card.notes && (
               <div className="relative">

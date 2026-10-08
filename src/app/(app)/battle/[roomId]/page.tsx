@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { getSiteUrl } from "@/lib/siteUrl";
-import BattleRoom, { type BattlePlayer } from "@/components/battle/BattleRoom";
+import BattleRoom, { type BattlePlayer, type FriendStatus } from "@/components/battle/BattleRoom";
 
 export default async function BattleRoomPage({
   params,
@@ -31,19 +31,27 @@ export default async function BattleRoomPage({
       supabase.from("profiles").select("id, display_name, avatar_url").in("id", memberIds),
       supabase.from("profiles").select("answer_display_mode").eq("id", user.id).single(),
       supabase.rpc("battle_set_options", { p_room: roomId }),
-      // The host's friends, for the invite list.
-      isHost && room.status === "lobby"
-        ? supabase
-            .from("friendships")
-            .select("requester_id, addressee_id")
-            .eq("status", "accepted")
-            .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
-        : Promise.resolve({ data: [] }),
+      // All my friendships: the host's invite list, and "Add friend" on the
+      // other players.
+      supabase
+        .from("friendships")
+        .select("requester_id, addressee_id, status")
+        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`),
     ]);
 
-  const friendIds = (friendships ?? []).map((f) =>
-    f.requester_id === user.id ? f.addressee_id : f.requester_id
-  );
+  const otherOf = (f: { requester_id: string; addressee_id: string }) =>
+    f.requester_id === user.id ? f.addressee_id : f.requester_id;
+  const friendStatus: Record<string, FriendStatus> = {};
+  for (const f of friendships ?? []) {
+    if (f.status === "accepted") friendStatus[otherOf(f)] = "friends";
+    else if (f.status === "pending")
+      friendStatus[otherOf(f)] = f.requester_id === user.id ? "sent" : "received";
+  }
+
+  const friendIds =
+    isHost && room.status === "lobby"
+      ? (friendships ?? []).filter((f) => f.status === "accepted").map(otherOf)
+      : [];
   const { data: friendProfiles } = friendIds.length
     ? await supabase.from("profiles").select("id, display_name, avatar_url").in("id", friendIds)
     : { data: [] };
@@ -82,6 +90,7 @@ export default async function BattleRoomPage({
     finishedAt: m.finished_at,
     placement: m.placement ?? null,
     forfeitedAt: m.forfeited_at ?? null,
+    leftAt: m.left_at ?? null,
   }));
 
   return (
@@ -104,6 +113,7 @@ export default async function BattleRoomPage({
         maxPlayers: room.max_players ?? 5,
         shuffle: room.shuffle ?? true,
         cardLimit: room.card_limit ?? null,
+        rematchRoomId: room.rematch_room_id ?? null,
       }}
       pointsEarned={pointsEarned}
       players={players}
@@ -117,6 +127,7 @@ export default async function BattleRoomPage({
         .filter((f) => !memberIds.includes(f.id))
         .map((f) => ({ id: f.id, name: f.display_name ?? "Unnamed", avatarUrl: f.avatar_url }))}
       inviteLink={`${await getSiteUrl()}/battle/join/${room.code}`}
+      friendStatus={friendStatus}
       answerMode={myProfile?.answer_display_mode ?? "both"}
     />
   );

@@ -132,8 +132,8 @@ export function EmoteButton({ onSend }: { onSend: (emoteId: string) => void }) {
 
   function send(emoteId: string) {
     if (coolingDown) return;
+    // The picker stays open for another; a tap elsewhere (or Escape) closes it.
     onSend(emoteId);
-    setOpen(false);
     setCoolingDown(true);
     window.setTimeout(() => setCoolingDown(false), EMOTE_COOLDOWN_MS);
   }
