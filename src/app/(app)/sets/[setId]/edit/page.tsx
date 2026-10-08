@@ -44,6 +44,21 @@ export default async function EditSetPage({ params }: { params: Promise<{ setId:
               × picks a colour automatically. + lets you choose any colour.
             </span>
           </div>
+          <label className="flex items-start gap-3 cursor-pointer border-t border-iron pt-4">
+            <input
+              type="checkbox"
+              name="is_private"
+              defaultChecked={set.is_private ?? false}
+              className="toggle toggle-sm toggle-primary mt-0.5"
+            />
+            <span className="flex flex-col gap-1">
+              <span>Private</span>
+              <span className="text-xs opacity-60 leading-snug">
+                Hidden from your friends&apos; view of your profile and from battle set lists.
+                Share links you send still work.
+              </span>
+            </span>
+          </label>
           <SubmitButton className="btn btn-primary mt-2" pendingText="Saving…">
             Save
           </SubmitButton>

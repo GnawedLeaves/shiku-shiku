@@ -18,17 +18,54 @@ function scoreBadge(percentage: number): string {
   return "badge-error";
 }
 
-export default async function HistoryPage() {
-  const supabase = await createClient();
+type Tab = "study" | "battles";
+
+export default async function HistoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const { tab: rawTab } = await searchParams;
+  const tab: Tab = rawTab === "battles" ? "battles" : "study";
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
+  return (
+    <div className="flex flex-col gap-4">
+      <h1 className="text-xl font-bold">History</h1>
+
+      {/* Tabs live in the URL so back/forward and reloads keep the tab. */}
+      <nav className="flex gap-2" aria-label="History type">
+        {(
+          [
+            ["study", "Study"],
+            ["battles", "Battles"],
+          ] as const
+        ).map(([value, label]) => (
+          <Link
+            key={value}
+            href={value === "study" ? "/history" : "/history?tab=battles"}
+            aria-current={tab === value ? "page" : undefined}
+            className={`btn btn-sm ${tab === value ? "btn-primary" : "btn-outline"}`}
+          >
+            {label}
+          </Link>
+        ))}
+      </nav>
+
+      {tab === "study" ? <StudyHistory userId={user.id} /> : <BattleHistory userId={user.id} />}
+    </div>
+  );
+}
+
+async function StudyHistory({ userId }: { userId: string }) {
+  const supabase = await createClient();
   const { data: results } = await supabase
     .from("session_results")
     .select(
       "id, session_id, set_id, set_name, score_percentage, correct_count, total_count, duration_seconds, completed_at, study_mode, dont_know_count"
     )
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .order("completed_at", { ascending: false })
     .limit(100);
 
@@ -51,8 +88,6 @@ export default async function HistoryPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-xl font-bold">Study history</h1>
-
       {sessions.length === 0 ? (
         <div className="alert">
           <span>No finished sessions yet. Complete a study session and it will show up here.</span>
@@ -135,6 +170,150 @@ export default async function HistoryPage() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+interface BattleRow {
+  roomId: string;
+  won: boolean;
+  forfeit: boolean;
+  opponentName: string;
+  setName: string;
+  total: number;
+  cleared: number;
+  dontKnow: number;
+  firstTry: number;
+  seconds: number | null;
+  finishedAt: string;
+}
+
+/** Finished battles, newest first, each linking to its results screen. */
+async function BattleHistory({ userId }: { userId: string }) {
+  const supabase = await createClient();
+
+  const { data: mine, error } = await supabase
+    .from("battle_room_members")
+    .select(
+      "room_id, cleared, dont_know, first_try, finished_at, battle_rooms!inner(status, winner_id, set_name, card_count, started_at, finished_at)"
+    )
+    .eq("user_id", userId)
+    .eq("battle_rooms.status", "finished");
+
+  if (error) {
+    return (
+      <div className="alert alert-error text-sm py-2">
+        <span>Couldn&apos;t load battles. Has migration 0008 been run?</span>
+      </div>
+    );
+  }
+
+  const roomIds = (mine ?? []).map((row) => row.room_id);
+  const { data: others } = roomIds.length
+    ? await supabase
+        .from("battle_room_members")
+        .select("room_id, user_id, finished_at")
+        .in("room_id", roomIds)
+        .neq("user_id", userId)
+    : { data: [] };
+  const opponentIds = Array.from(new Set((others ?? []).map((o) => o.user_id)));
+  const { data: profiles } = opponentIds.length
+    ? await supabase.from("profiles").select("id, display_name").in("id", opponentIds)
+    : { data: [] };
+
+  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.display_name ?? "Player"]));
+  const opponentByRoom = new Map((others ?? []).map((o) => [o.room_id, o]));
+  const seconds = (from: string | null, to: string | null) =>
+    from && to ? Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 1000)) : null;
+
+  const battles: BattleRow[] = (mine ?? [])
+    .map((row) => {
+      const room = row.battle_rooms;
+      const opponent = opponentByRoom.get(row.room_id);
+      const won = room.winner_id === userId;
+      const winnerFinishedAt = won ? row.finished_at : (opponent?.finished_at ?? null);
+      return {
+        roomId: row.room_id,
+        won,
+        // The winner never cleared the deck: the other player left.
+        forfeit: !winnerFinishedAt,
+        opponentName: opponent ? (nameById.get(opponent.user_id) ?? "Player") : "Player",
+        setName: room.set_name ?? "Unknown set",
+        total: room.card_count ?? 0,
+        cleared: row.cleared,
+        dontKnow: row.dont_know,
+        firstTry: row.first_try,
+        seconds: seconds(room.started_at, row.finished_at ?? room.finished_at),
+        finishedAt: room.finished_at ?? room.started_at ?? "",
+      };
+    })
+    .sort((a, b) => b.finishedAt.localeCompare(a.finishedAt));
+
+  if (battles.length === 0) {
+    return (
+      <div className="alert">
+        <span>No finished battles yet. Challenge a friend from the Friends tab or a set.</span>
+      </div>
+    );
+  }
+
+  const wins = battles.filter((b) => b.won).length;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="stats stats-horizontal bg-base-100 w-full">
+        <div className="stat p-3">
+          <div className="stat-title text-xs">Battles</div>
+          <div className="stat-value text-2xl">{battles.length}</div>
+        </div>
+        <div className="stat p-3">
+          <div className="stat-title text-xs">Wins</div>
+          <div className="stat-value text-2xl">{wins}</div>
+        </div>
+        <div className="stat p-3">
+          <div className="stat-title text-xs">Win rate</div>
+          <div className="stat-value text-2xl">{Math.round((wins / battles.length) * 100)}%</div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {battles.map((battle) => (
+          <Link
+            key={battle.roomId}
+            href={`/battle/${battle.roomId}`}
+            className="card bg-base-100 hover:bg-base-200 transition-colors"
+          >
+            <div className="card-body p-4 gap-1">
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-body-sm truncate min-w-0">vs {battle.opponentName}</span>
+                <span className="text-xs opacity-50 truncate max-w-[45%] shrink-0">
+                  {battle.setName}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-x-3 text-xs opacity-60">
+                  <span>
+                    {battle.cleared}/{battle.total} cleared · {battle.dontKnow} don&apos;t know
+                  </span>
+                  <span>{formatDuration(battle.seconds)}</span>
+                  <span>
+                    {new Date(battle.finishedAt).toLocaleString(undefined, {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </span>
+                </div>
+                <span
+                  className={`badge badge-sm shrink-0 ${battle.won ? "bg-iron text-concrete" : "badge-outline"}`}
+                >
+                  {battle.won ? "Won" : "Lost"}
+                  {battle.forfeit && " · forfeit"}
+                </span>
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

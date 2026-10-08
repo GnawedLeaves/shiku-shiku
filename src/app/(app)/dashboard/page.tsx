@@ -10,7 +10,7 @@ export default async function DashboardPage() {
 
   const { data: sets } = await supabase
     .from("sets")
-    .select("id, name, description, color, cards(count)")
+    .select("id, name, description, color, is_private, cards(count)")
     .eq("owner_id", user!.id)
     .order("created_at", { ascending: false });
 
@@ -44,7 +44,17 @@ export default async function DashboardPage() {
               className="flex min-h-40 flex-col justify-between gap-6 border-b border-r border-iron p-4 transition-opacity hover:opacity-90"
               style={{ backgroundColor: paint, color: ink }}
             >
-              <h2 className="text-subheading break-words">{set.name}</h2>
+              <div className="flex items-start justify-between gap-2">
+                <h2 className="text-subheading break-words min-w-0">{set.name}</h2>
+                {set.is_private && (
+                  <span
+                    className="shrink-0 rounded-full border px-2 py-0.5 text-xs"
+                    style={{ borderColor: ink }}
+                  >
+                    Private
+                  </span>
+                )}
+              </div>
               <div className="flex flex-col gap-1">
                 {set.description && <p className="text-body line-clamp-2">{set.description}</p>}
                 <p className="flex items-center gap-2 text-body">

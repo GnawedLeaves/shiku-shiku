@@ -11,6 +11,7 @@ import { getSiteUrl } from "@/lib/siteUrl";
 import CopyField from "@/components/CopyField";
 import LinkButton from "@/components/ui/LinkButton";
 import { getCurrentUser } from "@/lib/supabase/auth";
+import { createBattleRoom } from "@/lib/actions/battle";
 
 export default async function SetDetailPage({
   params,
@@ -62,6 +63,7 @@ export default async function SetDetailPage({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h1 className="text-xl font-bold break-words">{set.name}</h1>
+          {set.is_private && <span className="badge badge-sm mt-2">Private</span>}
           {set.description && <p className="text-sm opacity-70">{set.description}</p>}
         </div>
         <div className="flex gap-1">
@@ -93,7 +95,22 @@ export default async function SetDetailPage({
         <LinkButton href={`/sets/${setId}/scoreboard`} className="btn btn-outline btn-sm">
           Scoreboard
         </LinkButton>
+        {/* Opens a battle room with this set already picked. Private sets
+            can't be battled, since the opponent would see their cards. */}
+        <form action={createBattleRoom}>
+          <input type="hidden" name="set_id" value={setId} />
+          <SubmitButton
+            className="btn btn-outline btn-sm"
+            pendingText="Opening room…"
+            disabled={set.is_private || (cards ?? []).length === 0}
+          >
+            Battle a friend
+          </SubmitButton>
+        </form>
       </div>
+      {set.is_private && (
+        <p className="text-xs opacity-60 -mt-2">Private sets can&apos;t be used in battles.</p>
+      )}
 
       <div className="flex flex-col">
         <Disclosure title="Share" summary={shareLink ? "Link active" : "Not shared"}>

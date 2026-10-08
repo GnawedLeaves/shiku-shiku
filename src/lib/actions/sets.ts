@@ -43,7 +43,7 @@ export async function updateSet(setId: string, formData: FormData) {
   const supabase = await createClient();
   await supabase
     .from("sets")
-    .update({ name, description: description || null, color })
+    .update({ name, description: description || null, color, is_private: formData.get("is_private") === "on" })
     .eq("id", setId);
 
   revalidatePath(`/sets/${setId}`);

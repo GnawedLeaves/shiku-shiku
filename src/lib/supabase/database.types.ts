@@ -6,6 +6,17 @@ export type AnswerDisplayMode = "romaji" | "hiragana" | "both";
 export type SessionStatus = "active" | "paused" | "completed";
 export type FriendshipStatus = "pending" | "accepted" | "declined";
 export type BattleRoomStatus = "lobby" | "in_progress" | "finished";
+export type BattleInviteStatus = "pending" | "accepted" | "declined";
+
+/** One card of a battle's deck, snapshotted when the battle starts. */
+export interface BattleCard {
+  id: string;
+  question: string;
+  answer_hiragana: string | null;
+  answer_romaji: string | null;
+  answer_kanji: string | null;
+  notes: string | null;
+}
 
 /** One graded card inside a finished session, stored on `session_results`. */
 export interface SessionResultDetail {
@@ -96,6 +107,7 @@ export interface Database {
           share_code: string | null;
           origin_set_id: string | null;
           is_public: boolean;
+          is_private: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -108,6 +120,7 @@ export interface Database {
           share_code?: string | null;
           origin_set_id?: string | null;
           is_public?: boolean;
+          is_private?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -120,6 +133,7 @@ export interface Database {
           share_code?: string | null;
           origin_set_id?: string | null;
           is_public?: boolean;
+          is_private?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -358,6 +372,10 @@ export interface Database {
           created_at: string;
           started_at: string | null;
           finished_at: string | null;
+          deck: BattleCard[] | null;
+          winner_id: string | null;
+          set_name: string | null;
+          card_count: number | null;
         };
         Insert: {
           id?: string;
@@ -369,6 +387,10 @@ export interface Database {
           created_at?: string;
           started_at?: string | null;
           finished_at?: string | null;
+          deck?: BattleCard[] | null;
+          winner_id?: string | null;
+          set_name?: string | null;
+          card_count?: number | null;
         };
         Update: {
           id?: string;
@@ -380,6 +402,10 @@ export interface Database {
           created_at?: string;
           started_at?: string | null;
           finished_at?: string | null;
+          deck?: BattleCard[] | null;
+          winner_id?: string | null;
+          set_name?: string | null;
+          card_count?: number | null;
         };
         Relationships: [];
       };
@@ -390,6 +416,12 @@ export interface Database {
           score: number;
           is_ready: boolean;
           joined_at: string;
+          queue: QueueEntry[] | null;
+          current_index: number;
+          cleared: number;
+          dont_know: number;
+          first_try: number;
+          finished_at: string | null;
         };
         Insert: {
           room_id: string;
@@ -397,6 +429,12 @@ export interface Database {
           score?: number;
           is_ready?: boolean;
           joined_at?: string;
+          queue?: QueueEntry[] | null;
+          current_index?: number;
+          cleared?: number;
+          dont_know?: number;
+          first_try?: number;
+          finished_at?: string | null;
         };
         Update: {
           room_id?: string;
@@ -404,6 +442,12 @@ export interface Database {
           score?: number;
           is_ready?: boolean;
           joined_at?: string;
+          queue?: QueueEntry[] | null;
+          current_index?: number;
+          cleared?: number;
+          dont_know?: number;
+          first_try?: number;
+          finished_at?: string | null;
         };
         Relationships: [
           {
@@ -414,6 +458,28 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      battle_invites: {
+        Row: {
+          id: string;
+          room_id: string;
+          from_user: string;
+          to_user: string;
+          status: BattleInviteStatus;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          room_id: string;
+          from_user: string;
+          to_user: string;
+          status?: BattleInviteStatus;
+          created_at?: string;
+        };
+        Update: {
+          status?: BattleInviteStatus;
+        };
+        Relationships: [];
       };
     };
     Views: Record<string, never>;
@@ -449,6 +515,52 @@ export interface Database {
       join_battle_room: {
         Args: { p_code: string };
         Returns: string;
+      };
+      accept_battle_invite: {
+        Args: { p_invite: string };
+        Returns: string;
+      };
+      battle_set_options: {
+        Args: { p_room: string };
+        Returns: { id: string; name: string; owner_id: string; card_count: number }[];
+      };
+      start_battle: {
+        Args: { p_room: string };
+        Returns: undefined;
+      };
+      finish_battle: {
+        Args: { p_room: string };
+        Returns: string | null;
+      };
+      forfeit_battle: {
+        Args: { p_room: string };
+        Returns: undefined;
+      };
+      friend_profile_sets: {
+        Args: { p_user: string };
+        Returns: {
+          id: string;
+          name: string;
+          description: string | null;
+          color: string | null;
+          card_count: number;
+          created_at: string;
+        }[];
+      };
+      friend_profile_history: {
+        Args: { p_user: string; p_limit?: number };
+        Returns: {
+          id: string;
+          session_name: string | null;
+          set_name: string | null;
+          study_mode: StudyMode;
+          score_percentage: number;
+          correct_count: number;
+          total_count: number;
+          dont_know_count: number;
+          duration_seconds: number | null;
+          completed_at: string;
+        }[];
       };
     };
     Enums: Record<string, never>;

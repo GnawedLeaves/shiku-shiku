@@ -18,7 +18,12 @@ export default async function BattlePage({
   if (!user) redirect("/login");
 
   const [{ data: sets }, { data: memberships }] = await Promise.all([
-    supabase.from("sets").select("id, name").eq("owner_id", user.id).order("name"),
+    supabase
+      .from("sets")
+      .select("id, name")
+      .eq("owner_id", user.id)
+      .eq("is_private", false)
+      .order("name"),
     supabase
       .from("battle_room_members")
       .select("room_id, battle_rooms(id, code, name, status, created_at)")
@@ -36,15 +41,8 @@ export default async function BattlePage({
       <div>
         <h1 className="text-xl font-bold">Flashcard battles</h1>
         <p className="text-sm opacity-60">
-          Create a room, share the code, and see who joins.
+          Race a friend through the same deck in flashcards mode — first to clear it wins.
         </p>
-      </div>
-
-      <div className="alert alert-info text-sm py-2">
-        <span>
-          Early preview: rooms, invites and the lobby work. Live head-to-head rounds are still to
-          come.
-        </span>
       </div>
 
       {error && <div className="alert alert-error text-sm py-2">{error}</div>}
@@ -59,7 +57,7 @@ export default async function BattlePage({
               className="input input-bordered input-sm w-full"
             />
             <select name="set_id" className="select select-bordered select-sm w-full" defaultValue="">
-              <option value="">Pick a set (optional)</option>
+              <option value="">Pick a set now, or once your opponent joins</option>
               {(sets ?? []).map((set) => (
                 <option key={set.id} value={set.id}>
                   {set.name}

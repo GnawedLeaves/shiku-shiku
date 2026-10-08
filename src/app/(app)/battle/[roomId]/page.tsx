@@ -1,11 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getSiteUrl } from "@/lib/siteUrl";
-import { deleteBattleRoom, leaveBattleRoom, toggleReady } from "@/lib/actions/battle";
-import Avatar from "@/components/Avatar";
-import SubmitButton from "@/components/ui/SubmitButton";
-import BackButton from "@/components/ui/BackButton";
 import { getCurrentUser } from "@/lib/supabase/auth";
+import { getSiteUrl } from "@/lib/siteUrl";
+import BattleRoom, { type BattlePlayer } from "@/components/battle/BattleRoom";
 
 export default async function BattleRoomPage({
   params,
@@ -14,108 +11,93 @@ export default async function BattleRoomPage({
 }) {
   const { roomId } = await params;
 
-  const supabase = await createClient();
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
+  const supabase = await createClient();
   const [{ data: room }, { data: members }] = await Promise.all([
-    supabase.from("battle_rooms").select("*").eq("id", roomId).single(),
-    supabase
-      .from("battle_room_members")
-      .select("user_id, score, is_ready, joined_at")
-      .eq("room_id", roomId)
-      .order("joined_at"),
+    supabase.from("battle_rooms").select("*").eq("id", roomId).maybeSingle(),
+    supabase.from("battle_room_members").select("*").eq("room_id", roomId).order("joined_at"),
   ]);
 
+  // Not a member (RLS hides the room) or it was closed.
   if (!room) notFound();
 
-  const memberIds = (members ?? []).map((member) => member.user_id);
-  const { data: profiles } = memberIds.length
-    ? await supabase.from("profiles").select("id, display_name, avatar_url").in("id", memberIds)
-    : { data: [] };
-
-  const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
-  const me = (members ?? []).find((member) => member.user_id === user.id);
+  const memberIds = (members ?? []).map((m) => m.user_id);
   const isHost = room.host_id === user.id;
 
-  const siteUrl = await getSiteUrl();
+  const [{ data: profiles }, { data: myProfile }, { data: setOptions }, { data: friendships }] =
+    await Promise.all([
+      supabase.from("profiles").select("id, display_name, avatar_url").in("id", memberIds),
+      supabase.from("profiles").select("answer_display_mode").eq("id", user.id).single(),
+      supabase.rpc("battle_set_options", { p_room: roomId }),
+      // The host's friends, for the invite list.
+      isHost && room.status === "lobby"
+        ? supabase
+            .from("friendships")
+            .select("requester_id, addressee_id")
+            .eq("status", "accepted")
+            .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+  const friendIds = (friendships ?? []).map((f) =>
+    f.requester_id === user.id ? f.addressee_id : f.requester_id
+  );
+  const { data: friendProfiles } = friendIds.length
+    ? await supabase.from("profiles").select("id, display_name, avatar_url").in("id", friendIds)
+    : { data: [] };
+
+  // The chosen set's name comes from the picker list: the set may belong to
+  // the other player, so it isn't readable directly (the deck itself is
+  // snapshotted onto the room when the battle starts).
+  const chosenSet = (setOptions ?? []).find((option) => option.id === room.set_id);
+  const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
+
+  const players: BattlePlayer[] = (members ?? []).map((m) => ({
+    userId: m.user_id,
+    name: profileById.get(m.user_id)?.display_name ?? "Player",
+    avatarUrl: profileById.get(m.user_id)?.avatar_url ?? null,
+    isHost: m.user_id === room.host_id,
+    isReady: m.is_ready,
+    queue: m.queue,
+    currentIndex: m.current_index,
+    cleared: m.cleared,
+    dontKnow: m.dont_know,
+    firstTry: m.first_try,
+    finishedAt: m.finished_at,
+  }));
 
   return (
-    <div className="flex flex-col gap-4">
-      <BackButton href="/battle" label="Battles" />
-      <div>
-        <h1 className="text-xl font-bold">{room.name ?? `Room ${room.code}`}</h1>
-        <p className="text-sm opacity-60">Status: {room.status}</p>
-      </div>
-
-      <div className="card bg-base-100">
-        <div className="card-body p-4 gap-2">
-          <h2 className="font-semibold text-sm">Invite</h2>
-          <p className="text-xs opacity-60">Share this code, or the link below.</p>
-          <div className="text-3xl font-bold tracking-[0.3em] text-center py-2">{room.code}</div>
-          <input readOnly value={`${siteUrl}/battle/${room.id}`} className="input input-bordered input-sm w-full" />
-        </div>
-      </div>
-
-      <div className="card bg-base-100">
-        <div className="card-body p-4 gap-2">
-          <h2 className="font-semibold text-sm">Players ({members?.length ?? 0})</h2>
-          {(members ?? []).map((member) => {
-            const profile = profileById.get(member.user_id);
-            return (
-              <div key={member.user_id} className="flex items-center gap-3 py-1">
-                <Avatar url={profile?.avatar_url} name={profile?.display_name} size="sm" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">
-                    {profile?.display_name ?? "Player"}
-                    {member.user_id === room.host_id && (
-                      <span className="badge badge-ghost badge-xs ml-2">host</span>
-                    )}
-                  </p>
-                </div>
-                <span className={`badge badge-sm ${member.is_ready ? "badge-success" : "badge-ghost"}`}>
-                  {member.is_ready ? "ready" : "waiting"}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {me && (
-          <form action={toggleReady.bind(null, roomId, !me.is_ready)}>
-            <SubmitButton
-              className={`btn btn-sm ${me.is_ready ? "btn-outline" : "btn-primary"}`}
-              pendingText="…"
-            >
-              {me.is_ready ? "Not ready" : "I'm ready"}
-            </SubmitButton>
-          </form>
-        )}
-
-        <button type="button" className="btn btn-sm btn-disabled" disabled>
-          Start battle (coming soon)
-        </button>
-
-        {isHost ? (
-          <form action={deleteBattleRoom.bind(null, roomId)}>
-            <SubmitButton
-              className="btn btn-ghost btn-sm text-error"
-              pendingText="…"
-              confirmText="Close this room for everyone?"
-            >
-              Close room
-            </SubmitButton>
-          </form>
-        ) : (
-          <form action={leaveBattleRoom.bind(null, roomId)}>
-            <SubmitButton className="btn btn-ghost btn-sm" pendingText="…">
-              Leave room
-            </SubmitButton>
-          </form>
-        )}
-      </div>
-    </div>
+    <BattleRoom
+      // A fresh mount per phase, so in-game state starts from the server's copy.
+      key={room.status}
+      meId={user.id}
+      room={{
+        id: room.id,
+        code: room.code,
+        name: room.name,
+        hostId: room.host_id,
+        status: room.status,
+        setId: room.set_id,
+        setName: chosenSet?.name ?? null,
+        deck: room.deck ?? [],
+        startedAt: room.started_at,
+        finishedAt: room.finished_at,
+        winnerId: room.winner_id,
+      }}
+      players={players}
+      setOptions={(setOptions ?? []).map((o) => ({
+        id: o.id,
+        name: o.name,
+        ownerId: o.owner_id,
+        cardCount: Number(o.card_count),
+      }))}
+      friends={(friendProfiles ?? [])
+        .filter((f) => !memberIds.includes(f.id))
+        .map((f) => ({ id: f.id, name: f.display_name ?? "Unnamed", avatarUrl: f.avatar_url }))}
+      inviteLink={`${await getSiteUrl()}/battle/join/${room.code}`}
+      answerMode={myProfile?.answer_display_mode ?? "both"}
+    />
   );
 }

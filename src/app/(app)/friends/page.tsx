@@ -1,14 +1,16 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import Avatar from "@/components/Avatar";
+import FriendSearch from "@/components/FriendSearch";
+import OnlineDot from "@/components/realtime/OnlineDot";
+import SubmitButton from "@/components/ui/SubmitButton";
 import {
   acceptFriendRequest,
   declineFriendRequest,
   removeFriendship,
 } from "@/lib/actions/friends";
-import Avatar from "@/components/Avatar";
-import FriendSearch from "@/components/FriendSearch";
-import SubmitButton from "@/components/ui/SubmitButton";
 import { getCurrentUser } from "@/lib/supabase/auth";
+import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 
 interface ProfileSummary {
   id: string;
@@ -35,9 +37,9 @@ export default async function FriendsPage() {
 
   const { data: profiles } = otherIds.length
     ? await supabase
-        .from("profiles")
-        .select("id, display_name, username, avatar_url")
-        .in("id", otherIds)
+      .from("profiles")
+      .select("id, display_name, username, avatar_url")
+      .in("id", otherIds)
     : { data: [] as ProfileSummary[] };
 
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p as ProfileSummary]));
@@ -94,13 +96,25 @@ export default async function FriendsPage() {
           )}
           {friends.map((row) => {
             const person = personFor(row);
+            const friendId = row.requester_id === user.id ? row.addressee_id : row.requester_id;
             return (
               <div key={row.id} className="flex items-center gap-3">
-                <Avatar url={person?.avatar_url} name={person?.display_name} size="sm" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{person?.display_name ?? "Unnamed"}</p>
-                  {person?.username && <p className="text-xs opacity-60">@{person.username}</p>}
-                </div>
+                <Link
+                  href={`/friends/${friendId}`}
+                  className="flex flex-1 min-w-0 items-center gap-3 hover:opacity-80"
+                >
+                  <Avatar url={person?.avatar_url} name={person?.display_name} size="sm" />
+                  <div className="flex-1 min-w-0">
+                    <p className="flex items-center gap-2 font-medium">
+                      <span className="truncate">{person?.display_name ?? "Unnamed"}</span>
+                      <OnlineDot userId={friendId} />
+                    </p>
+                    {person?.username && <p className="text-xs opacity-60">@{person.username}</p>}
+                  </div>
+                  <span className="text-xs opacity-60" aria-hidden="true">
+                    View →
+                  </span>
+                </Link>
                 <form action={removeFriendship.bind(null, row.id)}>
                   <SubmitButton
                     className="btn btn-ghost btn-xs text-error"
