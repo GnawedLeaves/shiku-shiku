@@ -27,7 +27,7 @@ export default function StudySessionForm({
 }) {
   const [setId, setSetId] = useState(initialSetId && sets.some((s) => s.id === initialSetId) ? initialSetId : sets[0]?.id ?? "");
   const [mode, setMode] = useState<"all" | "random">("all");
-  const [studyMode, setStudyMode] = useState<"quiz" | "flashcards">("quiz");
+  const [studyMode, setStudyMode] = useState<"quiz" | "flashcards">("flashcards");
   const [countPreset, setCountPreset] = useState<string>("10");
   const [customCount, setCustomCount] = useState<string>("15");
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
@@ -172,24 +172,26 @@ export default function StudySessionForm({
         )}
 
         <div className="form-control">
-          <span className="label-text mb-1">Mode</span>
-          <div className="join">
+          <span className="label-text mb-2 block">Mode</span>
+          <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setStudyMode("quiz")}
-              className={`btn btn-sm join-item ${studyMode === "quiz" ? "btn-primary" : "btn-outline"}`}
-            >
-              Quiz
-            </button>
-            <button
-              type="button"
+              aria-pressed={studyMode === "flashcards"}
               onClick={() => setStudyMode("flashcards")}
-              className={`btn btn-sm join-item ${studyMode === "flashcards" ? "btn-primary" : "btn-outline"}`}
+              className={`btn btn-sm ${studyMode === "flashcards" ? "btn-primary" : "btn-outline"}`}
             >
               Flashcards
             </button>
+            <button
+              type="button"
+              aria-pressed={studyMode === "quiz"}
+              onClick={() => setStudyMode("quiz")}
+              className={`btn btn-sm ${studyMode === "quiz" ? "btn-primary" : "btn-outline"}`}
+            >
+              Quiz
+            </button>
           </div>
-          <p className="text-xs opacity-60 mt-1">
+          <p className="text-xs opacity-60 mt-2">
             {studyMode === "quiz"
               ? "Each card is shown once and scored."
               : "Cards you don't know go back into the deck until you've cleared them all. No score — just how many times you pressed “don't know”."}
@@ -204,7 +206,14 @@ export default function StudySessionForm({
 
         <label className="form-control">
           <span className="label-text mb-1">Session name (optional)</span>
-          <input name="name" className="input input-bordered w-full" placeholder="Evening review" />
+          <input
+            name="name"
+            className="input input-bordered w-full"
+            placeholder={`${sets.find((s) => s.id === setId)?.name ?? "Set"} session`}
+          />
+          <span className="label-text-alt opacity-60 mt-1">
+            Leave blank to use the placeholder.
+          </span>
         </label>
 
         <SubmitButton className="btn btn-primary mt-2" pendingText="Starting session…">

@@ -73,6 +73,8 @@ export default async function StudySessionPage({
       groupNamesById={groupNamesById}
       answerMode={profile?.answer_display_mode ?? "both"}
       studyMode={(session.scope as SessionScope).studyMode ?? "quiz"}
+      // Undefined until migration 0006 adds the column.
+      initialActiveSeconds={session.active_seconds ?? 0}
       initialScore={initialScore}
     />
   );

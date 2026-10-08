@@ -7,7 +7,9 @@ import {
   recordSwipe,
   pauseSession,
   restartSession,
+  saveActiveTime,
 } from "@/lib/actions/sessions";
+import { formatStudyTime, useStudyTimer } from "@/lib/study/useStudyTimer";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { computeScore } from "@/lib/study/score";
 import type { AnswerDisplayMode, QueueEntry, StudyMode } from "@/lib/supabase/database.types";
@@ -90,6 +92,7 @@ export default function SwipeSession({
   answerMode,
   studyMode,
   initialScore,
+  initialActiveSeconds = 0,
 }: {
   sessionId: string;
   initialQueue: QueueEntry[];
@@ -99,6 +102,8 @@ export default function SwipeSession({
   answerMode: AnswerDisplayMode;
   studyMode: StudyMode;
   initialScore: { correct: number; total: number } | null;
+  /** Study time already banked from earlier visits to this session. */
+  initialActiveSeconds?: number;
 }) {
   // `state` is what the server has confirmed; `optimistic` is what the user
   // sees. The next card appears on the same frame as the tap -- the write to
@@ -133,6 +138,16 @@ export default function SwipeSession({
   const score = isComplete ? computeScore(optimistic.queue) : initialScore;
   const misses = countMisses(optimistic.queue);
 
+  // Runs only while this screen is open and visible, and stops for good once
+  // the last card is graded (that grade carries the final total).
+  const timer = useStudyTimer({
+    initialSeconds: initialActiveSeconds,
+    running: !isComplete,
+    onSave: (seconds) => {
+      saveActiveTime(sessionId, seconds).catch(() => undefined);
+    },
+  });
+
   function reveal(cardId: string) {
     setRevealed((prev) => new Set(prev).add(cardId));
   }
@@ -150,7 +165,13 @@ export default function SwipeSession({
     const before = confirmed.current;
     for (let attempt = 0; ; attempt++) {
       try {
-        const saved = await recordSwipe(sessionId, cardId, result, requeuePosition);
+        const saved = await recordSwipe(
+          sessionId,
+          cardId,
+          result,
+          requeuePosition,
+          timer.current()
+        );
         return { queue: saved.queue, currentIndex: saved.currentIndex };
       } catch (e) {
         if (!isNetworkError(e) || attempt >= 2) throw e;
@@ -229,6 +250,9 @@ export default function SwipeSession({
       <div className="flex flex-col gap-6 py-8">
         <h1 className="display">Done.</h1>
         <hr className="hairline" />
+        <p className="text-body-sm opacity-70">
+          Time studied: <span className="tabular-nums">{formatStudyTime(timer.seconds)}</span>
+        </p>
         {flashcards ? (
           <p className="text-subheading">
             Cleared all {cardCount} card{cardCount === 1 ? "" : "s"} — pressed &ldquo;don&apos;t
@@ -292,7 +316,11 @@ export default function SwipeSession({
           )}
           {flashcards && <> · Don&apos;t know: {misses}</>}
         </p>
+        <p className="ml-auto mr-2 text-sm tabular-nums" aria-label="Time studied">
+          {formatStudyTime(timer.seconds)}
+        </p>
         <form action={pauseSession.bind(null, sessionId)}>
+          <input type="hidden" name="active_seconds" value={timer.seconds} />
           <SubmitButton className="btn btn-ghost btn-xs" pendingText="Pausing…">
             Pause &amp; exit
           </SubmitButton>

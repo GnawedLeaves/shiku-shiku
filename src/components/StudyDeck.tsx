@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AnimatePresence,
   MotionConfig,
@@ -24,6 +24,16 @@ export interface DeckCard {
 }
 
 type Result = "correct" | "incorrect";
+
+function isSpace(event: KeyboardEvent) {
+  return event.code === "Space" || event.key === " ";
+}
+
+/** True when the key press belongs to a text field, not to the deck. */
+function isTyping(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+}
 
 /** Vertical gap between the paper edges of the stack under the current card. */
 const LAYER_OFFSET = 3;
@@ -99,6 +109,30 @@ export default function StudyDeck({
     onGrade(result);
   }
 
+  // Space flips the card, then a second press marks it "got it" -- the same
+  // as tapping, for studying from a keyboard. Re-bound every render so it
+  // always sees the current card and reveal state.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!isSpace(event) || isTyping(event.target)) return;
+      // Stops the page scrolling, and a focused button from also "clicking".
+      event.preventDefault();
+      if (event.repeat) return;
+      if (revealed) grade("correct");
+      else onReveal();
+    }
+    // Browsers fire a focused button's click on keyup, so swallow that too.
+    function onKeyUp(event: KeyboardEvent) {
+      if (isSpace(event) && !isTyping(event.target)) event.preventDefault();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  });
+
   return (
     <MotionConfig reducedMotion="user">
       <div className="flex w-full flex-1 min-h-0 flex-col items-center gap-4">
@@ -152,8 +186,8 @@ export default function StudyDeck({
         </div>
         <p className="text-xs opacity-50 shrink-0">
           {revealed
-            ? "Swipe right = got it, swipe left = don't know"
-            : "Tap the card to flip it"}
+            ? "Swipe right or press Space = got it · swipe left = don't know"
+            : "Tap the card or press Space to flip it"}
         </p>
       </div>
     </MotionConfig>

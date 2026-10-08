@@ -215,6 +215,7 @@ export interface Database {
           scope: SessionScope;
           queue: QueueEntry[];
           current_index: number;
+          active_seconds: number;
           started_at: string;
           created_at: string;
           updated_at: string;
@@ -227,6 +228,7 @@ export interface Database {
           scope: SessionScope;
           queue: QueueEntry[];
           current_index?: number;
+          active_seconds?: number;
           started_at?: string;
           created_at?: string;
           updated_at?: string;
@@ -239,6 +241,7 @@ export interface Database {
           scope?: SessionScope;
           queue?: QueueEntry[];
           current_index?: number;
+          active_seconds?: number;
           started_at?: string;
           created_at?: string;
           updated_at?: string;

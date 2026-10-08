@@ -47,11 +47,10 @@ export async function createSession(formData: FormData) {
 
   await ensureSessionSlot(supabase, user.id);
 
-  const { data: cardRows, error: cardsError } = await supabase
-    .from("cards")
-    .select("id, card_groups(group_id)")
-    .eq("set_id", setId)
-    .order("created_at");
+  const [{ data: cardRows, error: cardsError }, { data: set }] = await Promise.all([
+    supabase.from("cards").select("id, card_groups(group_id)").eq("set_id", setId).order("created_at"),
+    supabase.from("sets").select("name").eq("id", setId).maybeSingle(),
+  ]);
 
   const allCards = (cardRows ?? []).map((row) => ({
     id: row.id,
@@ -97,7 +96,9 @@ export async function createSession(formData: FormData) {
     .from("study_sessions")
     .insert({
       user_id: user.id,
-      name: name || null,
+      // Unnamed sessions are named after their set, so the list and history
+      // always say what's being studied.
+      name: name || (set ? `${set.name} session` : null),
       status: "active",
       scope,
       queue,
@@ -150,7 +151,7 @@ export async function restartFromResult(resultId: string) {
 
   const { data: result } = await supabase
     .from("session_results")
-    .select("session_id, set_id, details, study_mode")
+    .select("session_id, set_id, set_name, details, study_mode")
     .eq("id", resultId)
     .eq("user_id", user.id)
     .single();
@@ -182,7 +183,7 @@ export async function restartFromResult(resultId: string) {
     new Set((result.details as SessionResultDetail[]).map((detail) => detail.card_id))
   );
   await startRepeatSession(supabase, user.id, {
-    name: null,
+    name: result.set_name ? `${result.set_name} session` : null,
     scope: {
       setId: result.set_id,
       mode: "random",
@@ -266,9 +267,14 @@ export async function recordSwipe(
   sessionId: string,
   cardId: string,
   result: "correct" | "incorrect",
-  requeuePosition?: number
+  requeuePosition?: number,
+  activeSeconds?: number
 ): Promise<RecordSwipeResult> {
   const supabase = await createClient();
+
+  // Saved before the grade so that, on the last card, the result row's
+  // duration (filled in by a trigger from this column) includes it.
+  if (activeSeconds !== undefined) await saveActiveSeconds(supabase, sessionId, activeSeconds);
 
   const { data, error } = await supabase.rpc("record_swipe", {
     p_session_id: sessionId,
@@ -306,8 +312,36 @@ export async function getSessionState(
   return { queue: data.queue as QueueEntry[], currentIndex: data.current_index };
 }
 
-export async function pauseSession(sessionId: string) {
+/**
+ * Stores the study screen's running timer. Only ever moves forward, so a
+ * late or out-of-order save can't wind the clock back. Best effort: a failure
+ * (or a database without migration 0006) never gets in the way of studying.
+ */
+async function saveActiveSeconds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  sessionId: string,
+  seconds: number
+) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return;
+  try {
+    await supabase
+      .from("study_sessions")
+      .update({ active_seconds: Math.floor(seconds) })
+      .eq("id", sessionId)
+      .lt("active_seconds", Math.floor(seconds));
+  } catch {
+    // Ignored -- see above.
+  }
+}
+
+export async function saveActiveTime(sessionId: string, seconds: number) {
   const supabase = await createClient();
+  await saveActiveSeconds(supabase, sessionId, seconds);
+}
+
+export async function pauseSession(sessionId: string, formData?: FormData) {
+  const supabase = await createClient();
+  await saveActiveSeconds(supabase, sessionId, Number(formData?.get("active_seconds") ?? 0));
   await supabase.from("study_sessions").update({ status: "paused" }).eq("id", sessionId);
   revalidatePath("/study/new");
   redirect("/study/new");
