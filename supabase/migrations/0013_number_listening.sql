@@ -6,9 +6,12 @@
 --    A numbers room has a range (number_min..number_max), how many correct
 --    answers win (rounds) and how many hints each player may use
 --    (hints_allowed). No set or deck: start_battle picks a random seed and
---    every player hears the same sequence of numbers, generated from it on
---    the client (src/lib/numbers/japanese.ts). Skipping moves on to the next
---    number without scoring, so the first to `rounds` correct answers is 1st.
+--    every player's numbers are generated from it on the client
+--    (NumberPool in src/lib/numbers/japanese.ts): the same set in the same
+--    order for everyone, and skips swap in spares from outside that set (the
+--    same spare for everyone's first skip, second skip, ...). Skips don't
+--    score, so the first to `rounds` correct answers is 1st. For numbers
+--    rooms, battle_room_members.current_index holds skips this round.
 -- 2. Per-player number stats on battle_room_members: hints used, wrong
 --    attempts and the numbers they skipped (for "most skipped" at the end).
 -- 3. number_practice_results: single-player runs, shown in History.

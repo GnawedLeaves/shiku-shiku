@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import NumberRound, { type RoundFeedback } from "@/components/numbers/NumberRound";
 import NumberOptionsPicker, {
   describeNumberOptions,
@@ -8,20 +8,17 @@ import NumberOptionsPicker, {
 import {
   DEFAULT_NUMBER_OPTIONS,
   formatNumber,
-  numberAt,
+  NumberPool,
   numberToHiragana,
   randomSeed,
   type NumberOptions,
+  type PoolPosition,
 } from "@/lib/numbers/japanese";
 import { formatStudyTime } from "@/lib/study/useStudyTimer";
 import { saveNumberPractice } from "@/lib/actions/numbers";
 
-interface Run {
+interface Run extends PoolPosition {
   seed: number;
-  /** Position in the number sequence (goes up on correct and on skip). */
-  index: number;
-  correct: number;
-  skips: number;
   hintsUsed: number;
   wrongAttempts: number;
   skippedNumbers: number[];
@@ -32,9 +29,9 @@ interface Run {
 
 const newRun = (): Run => ({
   seed: randomSeed(),
-  index: 0,
   correct: 0,
   skips: 0,
+  skipsThisRound: 0,
   hintsUsed: 0,
   wrongAttempts: 0,
   skippedNumbers: [],
@@ -68,9 +65,6 @@ export default function NumberPractice({
     return (
       <div className="flex flex-col gap-5">
         {header}
-        <p className="border border-iron px-3 py-2 text-sm">
-          🔊 Turn your sound on — the numbers are read out loud.
-        </p>
         <NumberOptionsPicker value={options} onChange={setOptions} />
         <button
           type="button"
@@ -112,14 +106,17 @@ function PracticeRun({
   onQuit: () => void;
 }) {
   const seconds = useSeconds(run.startedAt, true);
-  const number = numberAt(run.seed, run.index, options.min, options.max);
+  // Same rules as a battle: a set of different numbers, and skips swap in
+  // spares from outside that set.
+  const pool = useMemo(() => new NumberPool(run.seed, options), [run.seed, options]);
+  const number = pool.current(run);
 
   function correct() {
     const done = run.correct + 1 >= options.rounds;
     const next: Run = {
       ...run,
-      index: run.index + 1,
       correct: run.correct + 1,
+      skipsThisRound: 0,
       feedback: { kind: "correct", number },
       finishedAt: done ? Date.now() : null,
     };
@@ -179,7 +176,7 @@ function PracticeRun({
       </div>
 
       <NumberRound
-        key={run.index}
+        key={`${run.correct}:${run.skips}`}
         number={number}
         hintsLeft={options.hints - run.hintsUsed}
         feedback={run.feedback}
@@ -189,8 +186,8 @@ function PracticeRun({
         onSkip={() =>
           setRun({
             ...run,
-            index: run.index + 1,
             skips: run.skips + 1,
+            skipsThisRound: run.skipsThisRound + 1,
             skippedNumbers: [...run.skippedNumbers, number],
             feedback: { kind: "skipped", number },
           })

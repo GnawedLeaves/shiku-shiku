@@ -13,7 +13,7 @@ export interface RoundFeedback {
 
 /**
  * One number: it's read out in Japanese, the player types it in. Unlimited
- * tries; Replay (or Enter on an empty box) hears it again; a hint reveals
+ * tries; Replay hears it again; a hint reveals
  * the reading in hiragana; Skip moves on. Mount it with `key` set to the
  * round so each number starts fresh and is read out on arrival.
  */
@@ -39,9 +39,8 @@ export default function NumberRound({
   const [answer, setAnswer] = useState("");
   const [misses, setMisses] = useState(0);
   const [hinted, setHinted] = useState(false);
-  // Browsers can't read the device volume, so repeated replays are the cue
-  // that the player may not be hearing anything.
-  const [replays, setReplays] = useState(0);
+  // Checking an empty box asks for an answer (it isn't counted as a try).
+  const [needsAnswer, setNeedsAnswer] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const spoken = useRef(false);
 
@@ -60,7 +59,6 @@ export default function NumberRound({
   }, []);
 
   function replay(slow = false) {
-    setReplays((n) => n + 1);
     speak(number, { slow });
     inputRef.current?.focus({ preventScroll: true });
   }
@@ -68,9 +66,11 @@ export default function NumberRound({
   function check(event: React.FormEvent) {
     event.preventDefault();
     if (!answer.trim()) {
-      replay();
+      setNeedsAnswer(true);
+      inputRef.current?.focus({ preventScroll: true });
       return;
     }
+    setNeedsAnswer(false);
     if (parseNumberAnswer(answer) === number) {
       onCorrect();
     } else {
@@ -88,8 +88,8 @@ export default function NumberRound({
     inputRef.current?.focus({ preventScroll: true });
   }
 
-  // Laid out from the top, tight on phones, so the input sits just under the
-  // progress bar and both stay in view above the on-screen keyboard.
+  // Laid out from the top, so the input sits close under the progress bar and
+  // both stay in view above the on-screen keyboard.
   return (
     <div className="flex flex-col items-center gap-3 pt-1 text-center sm:gap-5 sm:pt-4">
       <p className="min-h-5 text-sm" role="status" aria-live="polite">
@@ -103,62 +103,52 @@ export default function NumberRound({
         )}
       </p>
 
-      {/* Speaker, replay controls and hint on one row. */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col items-center gap-2">
         <button
           type="button"
           onClick={() => replay()}
           aria-label="Play the number again"
-          className={`grid h-16 w-16 shrink-0 place-items-center rounded-full border border-iron bg-iron text-concrete transition-transform active:scale-95 sm:h-24 sm:w-24 ${speaking ? "scale-105" : ""}`}
+          className={`grid h-24 w-24 place-items-center rounded-full border border-iron bg-iron text-concrete transition-transform active:scale-95 ${speaking ? "scale-105" : ""}`}
         >
           <SpeakerIcon />
         </button>
-        <div className="flex flex-col items-start gap-1">
-          <div className="flex gap-1">
-            <button type="button" className="btn btn-outline btn-xs" onClick={() => replay()}>
-              Replay
-            </button>
-            <button type="button" className="btn btn-outline btn-xs" onClick={() => replay(true)}>
-              Slow
-            </button>
-          </div>
-          {!hinted && (
-            <button
-              type="button"
-              className="btn btn-outline btn-xs"
-              onClick={hint}
-              disabled={hintsLeft <= 0}
-            >
-              Hint · {hintsLeft} left
-            </button>
-          )}
+        <div className="flex gap-1">
+          <button type="button" className="btn btn-ghost btn-xs" onClick={() => replay()}>
+            Replay
+          </button>
+          <button type="button" className="btn btn-ghost btn-xs" onClick={() => replay(true)}>
+            Slow
+          </button>
         </div>
+        {support === "unsupported" && (
+          <p className="max-w-xs text-xs text-error">
+            This browser can&apos;t read text aloud. Try Chrome, Safari or Edge.
+          </p>
+        )}
+        {support === "no-japanese-voice" && (
+          <p className="max-w-xs text-xs opacity-70">
+            No Japanese voice found on this device, so it may not sound right. Add a Japanese voice
+            in your system&apos;s speech settings.
+          </p>
+        )}
       </div>
 
-      {support === "unsupported" && (
-        <p className="max-w-xs text-xs text-error">
-          This browser can&apos;t read text aloud. Try Chrome, Safari or Edge.
-        </p>
-      )}
-      {support === "no-japanese-voice" && (
-        <p className="max-w-xs text-xs opacity-70">
-          No Japanese voice found on this device, so it may not sound right. Add a Japanese voice in
-          your system&apos;s speech settings.
-        </p>
-      )}
-
-      {replays >= 2 && support !== "unsupported" && (
-        <p className="max-w-xs border border-warning px-3 py-1.5 text-xs">
-          Can&apos;t hear anything? Check your volume isn&apos;t at zero — on iPhone, also turn off
-          silent mode.
-        </p>
-      )}
-
-      {hinted && (
-        <p className="text-[clamp(22px,6.5vw,34px)] leading-tight [overflow-wrap:anywhere]">
-          {numberToHiragana(number)}
-        </p>
-      )}
+      <div className="min-h-8">
+        {hinted ? (
+          <p className="text-[clamp(22px,6.5vw,34px)] leading-tight [overflow-wrap:anywhere]">
+            {numberToHiragana(number)}
+          </p>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={hint}
+            disabled={hintsLeft <= 0}
+          >
+            Hint · {hintsLeft} left
+          </button>
+        )}
+      </div>
 
       <motion.form
         onSubmit={check}
@@ -174,25 +164,30 @@ export default function NumberRound({
           autoComplete="off"
           enterKeyHint="done"
           value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
+          onChange={(e) => {
+            setAnswer(e.target.value);
+            setNeedsAnswer(false);
+          }}
           placeholder="Type the number"
           aria-label="The number you heard"
-          className={`input input-bordered input-lg w-full min-w-0 text-center tabular-nums ${misses > 0 && !answer ? "input-error" : ""}`}
+          aria-invalid={needsAnswer || undefined}
+          className={`input input-bordered input-lg w-full min-w-0 text-center tabular-nums ${(misses > 0 || needsAnswer) && !answer ? "input-error" : ""}`}
         />
         <button type="submit" className="btn btn-primary btn-lg">
           Check
         </button>
       </motion.form>
-      <div className="flex w-full max-w-xs items-center justify-between gap-2">
-        <p className="min-h-4 text-left text-xs opacity-60">
-          {misses > 0
+      <p className={`min-h-4 text-xs ${needsAnswer ? "text-error" : "opacity-60"}`} role="status">
+        {needsAnswer
+          ? "Type the number you heard first."
+          : misses > 0
             ? `Not quite — ${misses === 1 ? "try again" : `${misses} tries so far`}.`
-            : "Enter on an empty box replays it."}
-        </p>
-        <button type="button" className="btn btn-ghost btn-sm shrink-0" onClick={onSkip}>
-          Skip
-        </button>
-      </div>
+            : null}
+      </p>
+
+      <button type="button" className="btn btn-ghost btn-sm" onClick={onSkip}>
+        Skip — I don&apos;t know
+      </button>
     </div>
   );
 }

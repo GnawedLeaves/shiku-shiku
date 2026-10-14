@@ -36,9 +36,10 @@ import type {
 import {
   formatNumber,
   mostSkipped,
-  numberAt,
   numberToHiragana,
+  NumberPool,
   type NumberOptions,
+  type PoolPosition,
 } from "@/lib/numbers/japanese";
 import StudyDeck from "@/components/StudyDeck";
 import NumberRound, { type RoundFeedback } from "@/components/numbers/NumberRound";
@@ -627,9 +628,6 @@ function Lobby({
           <p className="text-xs opacity-60">
             Everyone hears the same numbers. First to get {numberOptions.rounds} right wins;
             everyone plays on for their place. Skipping gives you a new number without scoring.
-          </p>
-          <p className="border border-iron px-3 py-2 text-sm">
-            🔊 Turn your sound on — the numbers are read out loud.
           </p>
         </section>
       ) : (
@@ -1230,21 +1228,21 @@ function Game({
   );
 }
 
-/** A numbers player's own progress, as saved on their member row. */
-interface NumbersProgress {
-  /** Position in the room's number sequence (up on correct and on skip). */
-  index: number;
-  correct: number;
-  skips: number;
+/**
+ * A numbers player's own progress, as saved on their member row
+ * (skipsThisRound is stored in current_index).
+ */
+interface NumbersProgress extends PoolPosition {
   hintsUsed: number;
   wrongAttempts: number;
   skippedNumbers: number[];
 }
 
 /**
- * Numbers mode: everyone hears the same numbers in the same order (from the
- * room's seed) and races to `rounds` correct answers. A skip moves on to the
- * next number without scoring.
+ * Numbers mode: everyone hears the same numbers in the same order and races
+ * to `rounds` correct answers. A skip swaps in a spare number without
+ * scoring -- the same spare for everyone's first skip, second skip and so on
+ * (see NumberPool), so nobody's set is easier than anyone else's.
  */
 function NumbersGame({
   room,
@@ -1261,8 +1259,8 @@ function NumbersGame({
   const supabase = useMemo(() => createClient(), []);
   const { min, max, rounds, hints } = room.numbers;
   const [progress, setProgress] = useState<NumbersProgress>({
-    index: me.currentIndex,
     correct: me.cleared,
+    skipsThisRound: me.currentIndex,
     skips: me.dontKnow,
     hintsUsed: me.hintsUsed,
     wrongAttempts: me.wrongAttempts,
@@ -1276,7 +1274,12 @@ function NumbersGame({
   const done = progress.correct >= rounds;
   const forfeited = Boolean(me.forfeitedAt);
   const elapsed = useElapsed(room.startedAt, !done && !forfeited);
-  const number = numberAt(room.numberSeed ?? 0, progress.index, min, max);
+  // The same pool on every player's device, from the room's seed.
+  const pool = useMemo(
+    () => new NumberPool(room.numberSeed ?? 0, { min, max, rounds }),
+    [room.numberSeed, min, max, rounds]
+  );
+  const number = pool.current(progress);
   const winner = room.winnerId ? others.find((p) => p.userId === room.winnerId) : null;
   const stillPlaying = others.filter((p) => !p.finishedAt && !p.forfeitedAt);
 
@@ -1290,7 +1293,7 @@ function NumbersGame({
         const { error: saveError } = await supabase
           .from("battle_room_members")
           .update({
-            current_index: next.index,
+            current_index: next.skipsThisRound,
             cleared: next.correct,
             dont_know: next.skips,
             hints_used: next.hintsUsed,
@@ -1338,13 +1341,13 @@ function NumbersGame({
           />
         ) : (
           <NumberRound
-            key={progress.index}
+            key={`${progress.correct}:${progress.skips}`}
             number={number}
             hintsLeft={hints - progress.hintsUsed}
             feedback={feedback}
             onCorrect={() => {
               setFeedback({ kind: "correct", number });
-              save({ ...progress, index: progress.index + 1, correct: progress.correct + 1 });
+              save({ ...progress, correct: progress.correct + 1, skipsThisRound: 0 });
             }}
             onWrong={() => save({ ...progress, wrongAttempts: progress.wrongAttempts + 1 })}
             onHint={() => save({ ...progress, hintsUsed: progress.hintsUsed + 1 })}
@@ -1352,8 +1355,8 @@ function NumbersGame({
               setFeedback({ kind: "skipped", number });
               save({
                 ...progress,
-                index: progress.index + 1,
                 skips: progress.skips + 1,
+                skipsThisRound: progress.skipsThisRound + 1,
                 skippedNumbers: [...progress.skippedNumbers, number],
               });
             }}

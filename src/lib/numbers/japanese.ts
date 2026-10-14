@@ -108,17 +108,102 @@ function rawNumberAt(seed: number, index: number, min: number, max: number): num
 }
 
 /**
- * The `index`-th number of a game. The same seed gives every player the same
- * numbers in the same order, so a battle is fair; skipping just moves on to
- * the next index. Avoids the same number twice in a row when it can.
+ * Draws numbers from a seeded stream without repeats: the same seed gives the
+ * same numbers in the same order on every device. Numbers in `exclude` are
+ * never drawn. Once the range runs out (only in small ranges) it starts a
+ * fresh cycle, still never giving the same number twice in a row.
  */
-export function numberAt(seed: number, index: number, min: number, max: number): number {
-  const n = rawNumberAt(seed, index, min, max);
-  const span = max - min + 1;
-  if (span > 1 && index > 0 && n === rawNumberAt(seed, index - 1, min, max)) {
-    return min + ((n - min + 1) % span);
+class Draw {
+  private readonly seed: number;
+  private readonly min: number;
+  private readonly max: number;
+  private readonly exclude: ReadonlySet<number>;
+  private readonly used = new Set<number>();
+  private position = 0;
+  private last: number | null = null;
+
+  constructor(seed: number, min: number, max: number, exclude: ReadonlySet<number>) {
+    this.seed = seed;
+    this.min = min;
+    this.max = max;
+    this.exclude = exclude;
   }
-  return n;
+
+  next(): number {
+    const { min, max } = this;
+    const span = max - min + 1;
+    if (span - this.used.size - this.exclude.size <= 0) this.used.clear();
+    // The excluded numbers fill the whole range: nothing else to give.
+    const ignoreExclude = span - this.exclude.size <= 0;
+    const ok = (n: number) =>
+      !this.used.has(n) &&
+      (ignoreExclude || !this.exclude.has(n)) &&
+      (span === 1 || n !== this.last);
+    const take = (n: number) => {
+      this.used.add(n);
+      this.last = n;
+      return n;
+    };
+
+    for (let tries = 0; tries < 64; tries++) {
+      const n = rawNumberAt(this.seed, this.position++, min, max);
+      if (ok(n)) return take(n);
+    }
+    // Nearly used up (small ranges only): walk on from a random spot.
+    const start = rawNumberAt(this.seed, this.position++, min, max) - min;
+    for (let step = 0; step < span; step++) {
+      const n = min + ((start + step) % span);
+      if (ok(n)) return take(n);
+    }
+    return take(min + start);
+  }
+}
+
+/**
+ * A game's numbers, the same for every player (from the room's seed):
+ *
+ * - `main`: one number per round, all different when the range allows, in
+ *   the same order for everyone -- round 5 is the same number for all.
+ * - spares: what a skip gives you instead, never one of the main numbers.
+ *   They're handed out in skip order, so everyone's first skip is the same
+ *   number, their second skip the next one, and so on.
+ */
+export class NumberPool {
+  readonly main: number[];
+  private readonly spares: number[] = [];
+  private readonly spareDraw: Draw;
+
+  constructor(seed: number, { min, max, rounds }: Pick<NumberOptions, "min" | "max" | "rounds">) {
+    const mainDraw = new Draw(seed, min, max, new Set());
+    this.main = Array.from({ length: rounds }, () => mainDraw.next());
+    this.spareDraw = new Draw((seed ^ 0x5bd1e995) >>> 0, min, max, new Set(this.main));
+  }
+
+  /** The replacement for a player's `k`-th skip (0 = their first). */
+  spare(k: number): number {
+    while (this.spares.length <= k) this.spares.push(this.spareDraw.next());
+    return this.spares[k];
+  }
+
+  /**
+   * The number a player is on: the round's main number, or -- if they've
+   * skipped during this round -- the spare for their latest skip.
+   */
+  current({ correct, skips, skipsThisRound }: PoolPosition): number {
+    return skipsThisRound > 0
+      ? this.spare(skips - 1)
+      : this.main[Math.min(correct, this.main.length - 1)];
+  }
+}
+
+/** Where a player is in a game's numbers. */
+export interface PoolPosition {
+  /** Correct answers so far = the round they're on (0-based). */
+  correct: number;
+  /** Skips so far in the whole game. */
+  skips: number;
+  /** Skips since the round began (0 = still on the main number). */
+  skipsThisRound: number;
 }
 
 export function randomSeed(): number {
