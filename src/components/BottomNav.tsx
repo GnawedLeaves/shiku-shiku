@@ -9,7 +9,7 @@ import { useTypingOnTouch } from "@/lib/ui/useTypingOnTouch";
 // pages below it (e.g. Study while inside a running /study/<id> session).
 const items = [
   { href: "/dashboard", label: "Sets", sections: ["/dashboard", "/sets", "/share"] },
-  { href: "/study/new", label: "Study", sections: ["/study"] },
+  { href: "/study/new", label: "Study", sections: ["/study", "/numbers"] },
   { href: "/history", label: "History", sections: ["/history"] },
   { href: "/friends", label: "Friends", sections: ["/friends", "/battle"] },
   { href: "/settings", label: "Settings", sections: ["/settings", "/profile"] },

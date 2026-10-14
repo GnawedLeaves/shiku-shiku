@@ -91,6 +91,9 @@ export default async function BattleRoomPage({
     placement: m.placement ?? null,
     forfeitedAt: m.forfeited_at ?? null,
     leftAt: m.left_at ?? null,
+    hintsUsed: m.hints_used ?? 0,
+    wrongAttempts: m.wrong_attempts ?? 0,
+    skippedNumbers: m.skipped_numbers ?? [],
   }));
 
   return (
@@ -114,6 +117,14 @@ export default async function BattleRoomPage({
         shuffle: room.shuffle ?? true,
         cardLimit: room.card_limit ?? null,
         rematchRoomId: room.rematch_room_id ?? null,
+        mode: room.mode ?? "cards",
+        numbers: {
+          min: room.number_min ?? 1,
+          max: room.number_max ?? 100,
+          rounds: room.rounds ?? 10,
+          hints: room.hints_allowed ?? 3,
+        },
+        numberSeed: room.number_seed ?? null,
       }}
       pointsEarned={pointsEarned}
       players={players}

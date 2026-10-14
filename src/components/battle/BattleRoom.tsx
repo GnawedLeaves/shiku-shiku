@@ -10,6 +10,7 @@ import {
   rematchBattle,
   setBattleOptions,
   setBattleSet,
+  setNumberOptions,
   startBattle,
   toggleReady,
 } from "@/lib/actions/battle";
@@ -28,10 +29,22 @@ import { ordinal, playerColor, type PlayerColor } from "@/lib/battle/players";
 import type {
   AnswerDisplayMode,
   BattleCard,
+  BattleMode,
   BattleRoomStatus,
   QueueEntry,
 } from "@/lib/supabase/database.types";
+import {
+  formatNumber,
+  mostSkipped,
+  numberAt,
+  numberToHiragana,
+  type NumberOptions,
+} from "@/lib/numbers/japanese";
 import StudyDeck from "@/components/StudyDeck";
+import NumberRound, { type RoundFeedback } from "@/components/numbers/NumberRound";
+import NumberOptionsPicker, {
+  describeNumberOptions,
+} from "@/components/numbers/NumberOptionsPicker";
 import BattleChat from "@/components/battle/BattleChat";
 import { EmoteButton, EmoteLayer, type LiveEmote } from "@/components/battle/Emotes";
 import {
@@ -66,6 +79,10 @@ export interface BattlePlayer {
   forfeitedAt: string | null;
   /** Left the post-match lobby. */
   leftAt: string | null;
+  // Numbers mode: `cleared` counts correct answers and `dontKnow` skips.
+  hintsUsed: number;
+  wrongAttempts: number;
+  skippedNumbers: number[];
 }
 
 /** Where the viewer stands with another player, for "Add friend". */
@@ -89,6 +106,11 @@ interface RoomInfo {
   cardLimit: number | null;
   /** Set once someone starts a rematch from the results. */
   rematchRoomId: string | null;
+  mode: BattleMode;
+  /** Numbers mode settings. */
+  numbers: NumberOptions;
+  /** Numbers mode: everyone's sequence of numbers comes from this. */
+  numberSeed: number | null;
 }
 
 interface SetOption {
@@ -316,17 +338,17 @@ export default function BattleRoom({
   }
 
   if (room.status === "in_progress") {
+    // The server's copy, with any fresher Realtime progress laid over it.
+    const others = players
+      .filter((p) => p.userId !== meId)
+      .map((p) => ({ ...p, ...live[p.userId] }));
     return (
       <>
-        <Game
-          room={room}
-          me={me}
-          // The server's copy, with any fresher Realtime progress laid over it.
-          others={players
-            .filter((p) => p.userId !== meId)
-            .map((p) => ({ ...p, ...live[p.userId] }))}
-          answerMode={answerMode}
-        />
+        {room.mode === "numbers" ? (
+          <NumbersGame room={room} me={me} others={others} players={players} />
+        ) : (
+          <Game room={room} me={me} others={others} players={players} answerMode={answerMode} />
+        )}
         <EmoteLayer
           emotes={emotes}
           players={Object.fromEntries(
@@ -484,6 +506,8 @@ function Lobby({
       : ""
   );
   const [customOpen, setCustomOpen] = useState(Boolean(customDraft));
+  const isNumbers = room.mode === "numbers";
+  const [numberOptions, setOptimisticNumbers] = useOptimistic(room.numbers);
 
   const chosen = setOptions.find((option) => option.id === setId);
   const notReady = others.filter((p) => !p.isReady);
@@ -491,13 +515,22 @@ function Lobby({
   const blocker =
     players.length < 2
       ? "Invite at least one more player."
-      : !chosen
+      : !isNumbers && !chosen
         ? "Pick a set to battle with."
-        : chosen.cardCount === 0
+        : !isNumbers && chosen?.cardCount === 0
           ? "That set has no cards."
           : notReady.length > 0
             ? `Waiting for ${notReady.map((p) => p.name).join(", ")} to get ready.`
             : null;
+
+  function saveNumbers(next: NumberOptions) {
+    setError(null);
+    startTransition(async () => {
+      setOptimisticNumbers(next);
+      const result = await setNumberOptions(room.id, next);
+      if ("error" in result && result.error) setError(result.error);
+    });
+  }
 
   function pickSet(next: string) {
     setError(null);
@@ -538,7 +571,7 @@ function Lobby({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-end justify-between gap-3">
-        <h1 className="break-words">{room.name ?? "Battle"}</h1>
+        <h1 className="break-words">{room.name ?? (isNumbers ? "Number battle" : "Battle")}</h1>
         <span className="shrink-0 rounded-full border border-iron px-3 py-1 text-sm tracking-widest">
           {room.code}
         </span>
@@ -581,133 +614,150 @@ function Lobby({
         </div>
       </section>
 
-      <section className="flex flex-col gap-2">
-        <span className="label-text">Set</span>
-        {isHost ? (
-          <select
-            className="select select-bordered w-full"
-            value={setId}
-            onChange={(e) => pickSet(e.target.value)}
-            disabled={isPending}
-          >
-            <option value="">Pick a set…</option>
-            {/* One optgroup per player draws the line between their sets. */}
-            {owners.map((owner) => {
-              const sets = setOptions.filter((option) => option.ownerId === owner.userId);
-              return (
-                <optgroup
-                  key={owner.userId}
-                  label={owner.isHost ? "Your sets" : `${owner.name}'s sets`}
-                >
-                  {sets.length === 0 ? (
-                    <option disabled>No sets to show</option>
-                  ) : (
-                    sets.map((option) => (
-                      <option key={option.id} value={option.id} disabled={option.cardCount === 0}>
-                        {option.name} ({option.cardCount})
-                      </option>
-                    ))
-                  )}
-                </optgroup>
-              );
-            })}
-          </select>
-        ) : (
-          <p className="border border-iron px-4 py-3 text-body-sm">
-            {chosen ? `${chosen.name} · ${chosen.cardCount} cards` : "The host is picking a set…"}
+      {isNumbers ? (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-subheading">Number listening</h2>
+          {isHost ? (
+            <NumberOptionsPicker value={numberOptions} onChange={saveNumbers} />
+          ) : (
+            <p className="border border-iron px-4 py-3 text-body-sm">
+              {describeNumberOptions(numberOptions)}
+            </p>
+          )}
+          <p className="text-xs opacity-60">
+            Everyone hears the same numbers. First to get {numberOptions.rounds} right wins;
+            everyone plays on for their place. Skipping gives you a new number without scoring.
           </p>
-        )}
-
-        {/* Battle options: how the deck is drawn when the battle starts. */}
-        {isHost ? (
-          <details className="group border border-iron">
-            <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 select-none [&::-webkit-details-marker]:hidden">
-              <span className="text-body-sm">Battle options</span>
-              <span className="text-sm opacity-60">
-                {describeOptions(options.shuffle, options.cardLimit)}
-              </span>
-              <span
-                className="ml-auto text-lg leading-none transition-transform group-open:rotate-45"
-                aria-hidden="true"
-              >
-                +
-              </span>
-            </summary>
-            <div className="flex flex-col gap-4 border-t border-iron px-4 pt-3 pb-4">
-              <label className="flex cursor-pointer items-center gap-2">
-                <input
-                  type="checkbox"
-                  className="toggle toggle-sm toggle-primary"
-                  checked={options.shuffle}
-                  onChange={(e) => saveOptions({ ...options, shuffle: e.target.checked })}
-                />
-                <span>Shuffle card order</span>
-              </label>
-              <div className="flex flex-col gap-2">
-                <span className="label-text">How many cards?</span>
-                <div className="flex flex-wrap items-center gap-2">
-                  {[null, ...CARD_PRESETS].map((preset) => (
-                    <button
-                      key={preset ?? "all"}
-                      type="button"
-                      aria-pressed={!customOpen && options.cardLimit === preset}
-                      onClick={() => {
-                        setCustomOpen(false);
-                        saveOptions({ ...options, cardLimit: preset });
-                      }}
-                      className={`btn btn-sm ${!customOpen && options.cardLimit === preset ? "btn-primary" : "btn-outline"}`}
-                    >
-                      {preset ?? "All"}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    aria-pressed={customOpen}
-                    onClick={() => setCustomOpen(true)}
-                    className={`btn btn-sm ${customOpen ? "btn-primary" : "btn-outline"}`}
+        </section>
+      ) : (
+        <section className="flex flex-col gap-2">
+          <span className="label-text">Set</span>
+          {isHost ? (
+            <select
+              className="select select-bordered w-full"
+              value={setId}
+              onChange={(e) => pickSet(e.target.value)}
+              disabled={isPending}
+            >
+              <option value="">Pick a set…</option>
+              {/* One optgroup per player draws the line between their sets. */}
+              {owners.map((owner) => {
+                const sets = setOptions.filter((option) => option.ownerId === owner.userId);
+                return (
+                  <optgroup
+                    key={owner.userId}
+                    label={owner.isHost ? "Your sets" : `${owner.name}'s sets`}
                   >
-                    Custom
-                  </button>
-                  {customOpen && (
-                    <input
-                      type="number"
-                      min={1}
-                      inputMode="numeric"
-                      value={customDraft}
-                      placeholder="15"
-                      onChange={(e) => setCustomDraft(e.target.value)}
-                      // Saved when you're done typing, not on every keystroke.
-                      onBlur={applyCustom}
-                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), applyCustom())}
-                      className="input input-bordered input-sm w-20"
-                      aria-label="Custom number of cards"
-                    />
+                    {sets.length === 0 ? (
+                      <option disabled>No sets to show</option>
+                    ) : (
+                      sets.map((option) => (
+                        <option key={option.id} value={option.id} disabled={option.cardCount === 0}>
+                          {option.name} ({option.cardCount})
+                        </option>
+                      ))
+                    )}
+                  </optgroup>
+                );
+              })}
+            </select>
+          ) : (
+            <p className="border border-iron px-4 py-3 text-body-sm">
+              {chosen ? `${chosen.name} · ${chosen.cardCount} cards` : "The host is picking a set…"}
+            </p>
+          )}
+
+          {/* Battle options: how the deck is drawn when the battle starts. */}
+          {isHost ? (
+            <details className="group border border-iron">
+              <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 select-none [&::-webkit-details-marker]:hidden">
+                <span className="text-body-sm">Battle options</span>
+                <span className="text-sm opacity-60">
+                  {describeOptions(options.shuffle, options.cardLimit)}
+                </span>
+                <span
+                  className="ml-auto text-lg leading-none transition-transform group-open:rotate-45"
+                  aria-hidden="true"
+                >
+                  +
+                </span>
+              </summary>
+              <div className="flex flex-col gap-4 border-t border-iron px-4 pt-3 pb-4">
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="toggle toggle-sm toggle-primary"
+                    checked={options.shuffle}
+                    onChange={(e) => saveOptions({ ...options, shuffle: e.target.checked })}
+                  />
+                  <span>Shuffle card order</span>
+                </label>
+                <div className="flex flex-col gap-2">
+                  <span className="label-text">How many cards?</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {[null, ...CARD_PRESETS].map((preset) => (
+                      <button
+                        key={preset ?? "all"}
+                        type="button"
+                        aria-pressed={!customOpen && options.cardLimit === preset}
+                        onClick={() => {
+                          setCustomOpen(false);
+                          saveOptions({ ...options, cardLimit: preset });
+                        }}
+                        className={`btn btn-sm ${!customOpen && options.cardLimit === preset ? "btn-primary" : "btn-outline"}`}
+                      >
+                        {preset ?? "All"}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      aria-pressed={customOpen}
+                      onClick={() => setCustomOpen(true)}
+                      className={`btn btn-sm ${customOpen ? "btn-primary" : "btn-outline"}`}
+                    >
+                      Custom
+                    </button>
+                    {customOpen && (
+                      <input
+                        type="number"
+                        min={1}
+                        inputMode="numeric"
+                        value={customDraft}
+                        placeholder="15"
+                        onChange={(e) => setCustomDraft(e.target.value)}
+                        // Saved when you're done typing, not on every keystroke.
+                        onBlur={applyCustom}
+                        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), applyCustom())}
+                        className="input input-bordered input-sm w-20"
+                        aria-label="Custom number of cards"
+                      />
+                    )}
+                  </div>
+                  {chosen && options.cardLimit && options.cardLimit >= chosen.cardCount && (
+                    <p className="text-xs opacity-60">
+                      {chosen.name} has {chosen.cardCount} cards — all of them will be used.
+                    </p>
+                  )}
+                  {options.cardLimit && (!chosen || options.cardLimit < chosen.cardCount) && (
+                    <p className="text-xs opacity-60">
+                      A random {options.cardLimit} cards from the set.
+                    </p>
                   )}
                 </div>
-                {chosen && options.cardLimit && options.cardLimit >= chosen.cardCount && (
-                  <p className="text-xs opacity-60">
-                    {chosen.name} has {chosen.cardCount} cards — all of them will be used.
-                  </p>
-                )}
-                {options.cardLimit && (!chosen || options.cardLimit < chosen.cardCount) && (
-                  <p className="text-xs opacity-60">
-                    A random {options.cardLimit} cards from the set.
-                  </p>
-                )}
               </div>
-            </div>
-          </details>
-        ) : (
-          <p className="text-sm opacity-60">
-            {describeOptions(options.shuffle, options.cardLimit)}
-          </p>
-        )}
+            </details>
+          ) : (
+            <p className="text-sm opacity-60">
+              {describeOptions(options.shuffle, options.cardLimit)}
+            </p>
+          )}
 
-        <p className="text-xs opacity-60">
-          First to clear every card in flashcards mode wins; everyone plays on for their place.
-          Missed cards go back into your deck.
-        </p>
-      </section>
+          <p className="text-xs opacity-60">
+            First to clear every card in flashcards mode wins; everyone plays on for their place.
+            Missed cards go back into your deck.
+          </p>
+        </section>
+      )}
 
       {/* The main action, centred: Ready for players, Start for the host. */}
       <div className="flex flex-col items-center gap-2 py-2">
@@ -945,15 +995,135 @@ function RaceProgress({
   );
 }
 
+/** The battle timer, and Forfeit (or Leave, once you're out of the race). */
+function GameHeader({
+  roomId,
+  elapsed,
+  out,
+  winner,
+}: {
+  roomId: string;
+  elapsed: number;
+  /** Finished or gave up. */
+  out: boolean;
+  winner: BattlePlayer | null | undefined;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <p className="text-subheading tabular-nums" aria-label="Battle time">
+        {formatStudyTime(elapsed)}
+      </p>
+      {out ? (
+        // Once you're out of the race, leaving doesn't affect the battle.
+        <form action={leaveBattleRoom.bind(null, roomId)}>
+          <SubmitButton className="btn btn-ghost btn-xs" pendingText="Leaving…">
+            Leave
+          </SubmitButton>
+        </form>
+      ) : (
+        // You stay in the room to wait for the others and see the results.
+        <form action={forfeitBattle.bind(null, roomId)}>
+          <SubmitButton
+            className="btn btn-ghost btn-xs"
+            pendingText="Giving up…"
+            confirmText={
+              winner
+                ? `Stop here? ${winner.name} has already won — you'll be placed last.`
+                : "Give up the battle? You'll be placed last."
+            }
+          >
+            {winner ? "Give up" : "Forfeit"}
+          </SubmitButton>
+        </form>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Once you're out of the race (finished or gave up): your result, who's
+ * still going, and a chat with everyone else who's waiting. The chat is the
+ * room's own, so it carries on into the post-match lobby.
+ */
+function WaitingPanel({
+  roomId,
+  me,
+  players,
+  stillPlaying,
+  doneTitle,
+  doneLine,
+}: {
+  roomId: string;
+  me: BattlePlayer;
+  players: BattlePlayer[];
+  stillPlaying: BattlePlayer[];
+  /** Shown while your place is being recorded. */
+  doneTitle: string;
+  /** Shown under your place once it's known. */
+  doneLine: string;
+}) {
+  const forfeited = Boolean(me.forfeitedAt);
+  const settled = forfeited || Boolean(me.placement);
+  const waiting = settled && stillPlaying.length > 0;
+
+  return (
+    <div
+      className={`flex flex-1 flex-col gap-4 ${waiting ? "pt-4" : "items-center justify-center text-center"}`}
+    >
+      <div
+        className={`flex flex-col gap-2 ${waiting ? "" : "items-center"}`}
+        role="status"
+      >
+        {forfeited ? (
+          <>
+            <p className="display">Gave up.</p>
+            <p className="text-subheading">You&apos;ll be placed last.</p>
+          </>
+        ) : me.placement ? (
+          <>
+            <p className="display">{me.placement === 1 ? "First!" : `${ordinal(me.placement)}!`}</p>
+            <p className="text-subheading">{doneLine}</p>
+          </>
+        ) : (
+          <>
+            <span className="loading loading-spinner loading-md" aria-hidden="true" />
+            <p className="text-subheading">{doneTitle}</p>
+            <p className="text-sm opacity-60">Recording your place…</p>
+          </>
+        )}
+        {waiting && (
+          <p className="flex items-center gap-2 text-sm opacity-60">
+            <span className="loading loading-dots loading-xs" aria-hidden="true" />
+            Waiting for {stillPlaying.map((p) => p.name).join(", ")} — results appear when
+            everyone&apos;s done.
+          </p>
+        )}
+      </div>
+
+      {waiting && (
+        <BattleChat
+          roomId={roomId}
+          meId={me.userId}
+          players={chatPlayers(players)}
+          title="Waiting room chat"
+        />
+      )}
+    </div>
+  );
+}
+
 function Game({
   room,
   me,
   others,
+  players,
   answerMode,
 }: {
   room: RoomInfo;
   me: BattlePlayer;
   others: BattlePlayer[];
+  /** Everyone, for the waiting room chat. */
+  players: BattlePlayer[];
   answerMode: AnswerDisplayMode;
 }) {
   const router = useRouter();
@@ -1015,49 +1185,13 @@ function Game({
       .catch(() => setError("Couldn't sync your progress — check your connection."));
   }
 
-  const waitingFor =
-    stillPlaying.length > 0 ? (
-      <p className="flex items-center gap-2 text-sm opacity-60">
-        <span className="loading loading-dots loading-xs" aria-hidden="true" />
-        Waiting for {stillPlaying.map((p) => p.name).join(", ")} — results appear when
-        everyone&apos;s done.
-      </p>
-    ) : null;
-
   return (
     // Fills the screen between the header and the nav, so the card keeps its
     // size however many players are racing.
     <div className="flex min-h-[max(35rem,calc(100dvh-13rem))] flex-col gap-3">
       {error && <div className="alert alert-error text-sm py-2">{error}</div>}
 
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-subheading tabular-nums" aria-label="Battle time">
-          {formatStudyTime(elapsed)}
-        </p>
-        {done || forfeited ? (
-          // Once you're out of the race, leaving doesn't affect the battle.
-          <form action={leaveBattleRoom.bind(null, room.id)}>
-            <SubmitButton className="btn btn-ghost btn-xs" pendingText="Leaving…">
-              Leave
-            </SubmitButton>
-          </form>
-        ) : (
-          // You stay in the room to wait for the others and see the results.
-          <form action={forfeitBattle.bind(null, room.id)}>
-            <SubmitButton
-              className="btn btn-ghost btn-xs"
-              pendingText="Giving up…"
-              confirmText={
-                winner
-                  ? `Stop here? ${winner.name} has already won — you'll be placed last.`
-                  : "Give up the battle? You'll be placed last."
-              }
-            >
-              {winner ? "Give up" : "Forfeit"}
-            </SubmitButton>
-          </form>
-        )}
-      </div>
+      <GameHeader roomId={room.id} elapsed={elapsed} out={done || forfeited} winner={winner} />
 
       <RaceProgress
         me={me}
@@ -1068,38 +1202,15 @@ function Game({
       />
 
       <div className="flex flex-1 min-h-96 flex-col">
-        {forfeited ? (
-          <div
-            className="flex flex-1 flex-col items-center justify-center gap-3 text-center"
-            role="status"
-          >
-            <p className="display">Gave up.</p>
-            <p className="text-subheading">You&apos;ll be placed last.</p>
-            {waitingFor}
-          </div>
-        ) : done || !entry || entry.type !== "card" ? (
-          <div
-            className="flex flex-1 flex-col items-center justify-center gap-3 text-center"
-            role="status"
-          >
-            {me.placement ? (
-              <>
-                <p className="display">
-                  {me.placement === 1 ? "First!" : `${ordinal(me.placement)}!`}
-                </p>
-                <p className="text-subheading">
-                  You cleared the deck in {formatStudyTime(elapsed)}.
-                </p>
-                {waitingFor}
-              </>
-            ) : (
-              <>
-                <span className="loading loading-spinner loading-md" aria-hidden="true" />
-                <p className="text-subheading">Deck cleared!</p>
-                <p className="text-sm opacity-60">Recording your place…</p>
-              </>
-            )}
-          </div>
+        {forfeited || done || !entry || entry.type !== "card" ? (
+          <WaitingPanel
+            roomId={room.id}
+            me={me}
+            players={players}
+            stillPlaying={stillPlaying}
+            doneTitle="Deck cleared!"
+            doneLine={`You cleared the deck in ${formatStudyTime(elapsed)}.`}
+          />
         ) : (
           <StudyDeck
             card={cardsById[entry.cardId]}
@@ -1109,6 +1220,138 @@ function Game({
             cardsBehind={state.queue.length - state.currentIndex - 1}
             onReveal={() => setRevealed(true)}
             onGrade={grade}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** A numbers player's own progress, as saved on their member row. */
+interface NumbersProgress {
+  /** Position in the room's number sequence (up on correct and on skip). */
+  index: number;
+  correct: number;
+  skips: number;
+  hintsUsed: number;
+  wrongAttempts: number;
+  skippedNumbers: number[];
+}
+
+/**
+ * Numbers mode: everyone hears the same numbers in the same order (from the
+ * room's seed) and races to `rounds` correct answers. A skip moves on to the
+ * next number without scoring.
+ */
+function NumbersGame({
+  room,
+  me,
+  others,
+  players,
+}: {
+  room: RoomInfo;
+  me: BattlePlayer;
+  others: BattlePlayer[];
+  players: BattlePlayer[];
+}) {
+  const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+  const { min, max, rounds, hints } = room.numbers;
+  const [progress, setProgress] = useState<NumbersProgress>({
+    index: me.currentIndex,
+    correct: me.cleared,
+    skips: me.dontKnow,
+    hintsUsed: me.hintsUsed,
+    wrongAttempts: me.wrongAttempts,
+    skippedNumbers: me.skippedNumbers,
+  });
+  const [feedback, setFeedback] = useState<RoundFeedback | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Progress writes are chained so they reach the server in order.
+  const writes = useRef<Promise<unknown>>(Promise.resolve());
+
+  const done = progress.correct >= rounds;
+  const forfeited = Boolean(me.forfeitedAt);
+  const elapsed = useElapsed(room.startedAt, !done && !forfeited);
+  const number = numberAt(room.numberSeed ?? 0, progress.index, min, max);
+  const winner = room.winnerId ? others.find((p) => p.userId === room.winnerId) : null;
+  const stillPlaying = others.filter((p) => !p.finishedAt && !p.forfeitedAt);
+
+  function save(next: NumbersProgress) {
+    if (forfeited) return;
+    setProgress(next);
+    const finished = next.correct >= rounds;
+
+    writes.current = writes.current
+      .then(async () => {
+        const { error: saveError } = await supabase
+          .from("battle_room_members")
+          .update({
+            current_index: next.index,
+            cleared: next.correct,
+            dont_know: next.skips,
+            hints_used: next.hintsUsed,
+            wrong_attempts: next.wrongAttempts,
+            skipped_numbers: next.skippedNumbers,
+          })
+          .eq("room_id", room.id)
+          .eq("user_id", me.userId);
+        if (saveError) throw saveError;
+        if (finished) {
+          // Records my place; then fetch it (it isn't pushed to me by Realtime).
+          const { error: finishError } = await supabase.rpc("finish_battle", { p_room: room.id });
+          if (finishError) throw finishError;
+          router.refresh();
+        }
+      })
+      .catch(() => setError("Couldn't sync your progress — check your connection."));
+  }
+
+  return (
+    <div className="flex min-h-[max(35rem,calc(100dvh-13rem))] flex-col gap-3">
+      {error && <div className="alert alert-error text-sm py-2">{error}</div>}
+
+      <GameHeader roomId={room.id} elapsed={elapsed} out={done || forfeited} winner={winner} />
+
+      <RaceProgress
+        me={me}
+        mine={progress.correct}
+        others={others}
+        total={rounds}
+        notice={winner && !done ? `${winner.name} finished first` : null}
+      />
+
+      <div className="flex flex-1 flex-col">
+        {done || forfeited ? (
+          <WaitingPanel
+            roomId={room.id}
+            me={me}
+            players={players}
+            stillPlaying={stillPlaying}
+            doneTitle="All done!"
+            doneLine={`You got ${rounds} numbers right in ${formatStudyTime(elapsed)}.`}
+          />
+        ) : (
+          <NumberRound
+            key={progress.index}
+            number={number}
+            hintsLeft={hints - progress.hintsUsed}
+            feedback={feedback}
+            onCorrect={() => {
+              setFeedback({ kind: "correct", number });
+              save({ ...progress, index: progress.index + 1, correct: progress.correct + 1 });
+            }}
+            onWrong={() => save({ ...progress, wrongAttempts: progress.wrongAttempts + 1 })}
+            onHint={() => save({ ...progress, hintsUsed: progress.hintsUsed + 1 })}
+            onSkip={() => {
+              setFeedback({ kind: "skipped", number });
+              save({
+                ...progress,
+                index: progress.index + 1,
+                skips: progress.skips + 1,
+                skippedNumbers: [...progress.skippedNumbers, number],
+              });
+            }}
           />
         )}
       </div>
@@ -1162,7 +1405,8 @@ function Results({
   answerMode: AnswerDisplayMode;
 }) {
   const router = useRouter();
-  const total = room.deck.length;
+  const isNumbers = room.mode === "numbers";
+  const total = isNumbers ? room.numbers.rounds : room.deck.length;
   const [rematchError, setRematchError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const secondsBetween = (from: string | null, to: string | null) =>
@@ -1183,7 +1427,8 @@ function Results({
   const headline =
     me.placement === 1 ? "Victory." : me.placement ? `${ordinal(me.placement)}.` : "Defeat.";
   const others = players.filter((p) => p.userId !== me.userId);
-  const hardest = mostMissed(players, room.deck);
+  const hardest = isNumbers ? [] : mostMissed(players, room.deck);
+  const skipped = isNumbers ? mostSkipped(players.map((p) => p.skippedNumbers)) : [];
 
   // Someone started a rematch while we're here: follow them into it (it
   // already has us in it). Only on the change, so opening an old battle from
@@ -1209,7 +1454,7 @@ function Results({
       <hr className="hairline" />
       <p className="text-subheading">
         {winner?.finishedAt
-          ? `${winner.userId === me.userId ? "You" : winner.name} cleared ${total} cards in ${formatStudyTime(secondsBetween(room.startedAt, winner.finishedAt) ?? 0)}.`
+          ? `${winner.userId === me.userId ? "You" : winner.name} ${isNumbers ? `got ${total} numbers right` : `cleared ${total} cards`} in ${formatStudyTime(secondsBetween(room.startedAt, winner.finishedAt) ?? 0)}.`
           : winner
             ? `Everyone else gave up — ${winner.userId === me.userId ? "you win" : `${winner.name} wins`}.`
             : "The battle is over."}
@@ -1241,10 +1486,18 @@ function Results({
                   {player.forfeitedAt && <span className="opacity-60"> · gave up</span>}
                   {away && <span className="opacity-60"> · {away.toLowerCase()}</span>}
                 </p>
-                <p className="text-xs opacity-60">
-                  {player.cleared}/{total} cleared · {player.firstTry} right first time ·{" "}
-                  {player.dontKnow} don&apos;t know
-                </p>
+                {isNumbers ? (
+                  <p className="text-xs opacity-60">
+                    {player.cleared}/{total} correct · {player.dontKnow} skipped ·{" "}
+                    {player.wrongAttempts} wrong tries · {player.hintsUsed} hint
+                    {player.hintsUsed === 1 ? "" : "s"}
+                  </p>
+                ) : (
+                  <p className="text-xs opacity-60">
+                    {player.cleared}/{total} cleared · {player.firstTry} right first time ·{" "}
+                    {player.dontKnow} don&apos;t know
+                  </p>
+                )}
               </div>
               {!isMe && (
                 <AddFriendButton userId={player.userId} status={friendStatus[player.userId]} />
@@ -1257,35 +1510,61 @@ function Results({
         })}
       </ol>
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-subheading">Hardest words</h2>
-        {hardest.length === 0 ? (
-          <p className="text-sm opacity-60">Nobody missed a single card.</p>
-        ) : (
-          <ol className="flex flex-col border-t border-iron">
-            {hardest.map(({ card, misses, players: missedBy }, index) => (
-              <li key={card.id} className="flex items-center gap-3 border-b border-iron py-2">
-                <span className="w-5 shrink-0 text-sm tabular-nums opacity-60">{index + 1}</span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-body-sm break-words">{card.question}</p>
-                  <p className="text-xs opacity-60 break-words">
-                    {formatAnswer(card, answerMode)}
-                    {card.answer_kanji && ` · ${card.answer_kanji}`}
-                  </p>
-                </div>
-                <span className="shrink-0 text-right text-xs tabular-nums opacity-70">
-                  {misses} miss{misses === 1 ? "" : "es"}
-                  {players.length > 1 && (
-                    <span className="block">
-                      {missedBy} of {players.length} players
-                    </span>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
+      {isNumbers ? (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-subheading">Most skipped numbers</h2>
+          {skipped.length === 0 ? (
+            <p className="text-sm opacity-60">Nobody skipped a single number.</p>
+          ) : (
+            <ol className="flex flex-col border-t border-iron">
+              {skipped.map(({ number, count }, index) => (
+                <li key={number} className="flex items-center gap-3 border-b border-iron py-2">
+                  <span className="w-5 shrink-0 text-sm tabular-nums opacity-60">{index + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-body-sm tabular-nums">{formatNumber(number)}</p>
+                    <p className="text-xs opacity-60 [overflow-wrap:anywhere]">
+                      {numberToHiragana(number)}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-xs tabular-nums opacity-70">
+                    skipped {count}×
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      ) : (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-subheading">Hardest words</h2>
+          {hardest.length === 0 ? (
+            <p className="text-sm opacity-60">Nobody missed a single card.</p>
+          ) : (
+            <ol className="flex flex-col border-t border-iron">
+              {hardest.map(({ card, misses, players: missedBy }, index) => (
+                <li key={card.id} className="flex items-center gap-3 border-b border-iron py-2">
+                  <span className="w-5 shrink-0 text-sm tabular-nums opacity-60">{index + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-body-sm break-words">{card.question}</p>
+                    <p className="text-xs opacity-60 break-words">
+                      {formatAnswer(card, answerMode)}
+                      {card.answer_kanji && ` · ${card.answer_kanji}`}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-right text-xs tabular-nums opacity-70">
+                    {misses} miss{misses === 1 ? "" : "es"}
+                    {players.length > 1 && (
+                      <span className="block">
+                        {missedBy} of {players.length} players
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      )}
 
       {rematchError && <div className="alert alert-error text-sm py-2">{rematchError}</div>}
       <div className="flex flex-wrap gap-2">

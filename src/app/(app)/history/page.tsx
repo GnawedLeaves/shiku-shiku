@@ -19,7 +19,7 @@ function scoreBadge(percentage: number): string {
   return "badge-error";
 }
 
-type Tab = "study" | "battles";
+type Tab = "study" | "numbers" | "battles";
 
 export default async function HistoryPage({
   searchParams,
@@ -27,7 +27,7 @@ export default async function HistoryPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const { tab: rawTab } = await searchParams;
-  const tab: Tab = rawTab === "battles" ? "battles" : "study";
+  const tab: Tab = rawTab === "battles" || rawTab === "numbers" ? rawTab : "study";
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
@@ -40,12 +40,13 @@ export default async function HistoryPage({
         {(
           [
             ["study", "Study"],
+            ["numbers", "Numbers"],
             ["battles", "Battles"],
           ] as const
         ).map(([value, label]) => (
           <Link
             key={value}
-            href={value === "study" ? "/history" : "/history?tab=battles"}
+            href={value === "study" ? "/history" : `/history?tab=${value}`}
             aria-current={tab === value ? "page" : undefined}
             className={`btn btn-sm ${tab === value ? "btn-primary" : "btn-outline"}`}
           >
@@ -54,7 +55,95 @@ export default async function HistoryPage({
         ))}
       </nav>
 
-      {tab === "study" ? <StudyHistory userId={user.id} /> : <BattleHistory userId={user.id} />}
+      {tab === "study" ? (
+        <StudyHistory userId={user.id} />
+      ) : tab === "numbers" ? (
+        <NumberHistory userId={user.id} />
+      ) : (
+        <BattleHistory userId={user.id} />
+      )}
+    </div>
+  );
+}
+
+/** Single-player number listening runs, newest first. */
+async function NumberHistory({ userId }: { userId: string }) {
+  const supabase = await createClient();
+  const { data: runs, error } = await supabase
+    .from("number_practice_results")
+    .select("*")
+    .eq("user_id", userId)
+    .order("completed_at", { ascending: false })
+    .limit(100);
+
+  if (error) {
+    return (
+      <div className="alert alert-error text-sm py-2">
+        <span>Couldn&apos;t load number practice. Has migration 0013 been run?</span>
+      </div>
+    );
+  }
+  if (!runs || runs.length === 0) {
+    return (
+      <div className="alert">
+        <span>
+          No number practice yet. Try <Link href="/numbers" className="link">number listening</Link>.
+        </span>
+      </div>
+    );
+  }
+
+  const numbersHeard = runs.reduce((sum, r) => sum + r.correct_count + r.skip_count, 0);
+  const correct = runs.reduce((sum, r) => sum + r.correct_count, 0);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="stats stats-horizontal bg-base-100 w-full">
+        <div className="stat p-3">
+          <div className="stat-title text-xs">Runs</div>
+          <div className="stat-value text-2xl">{runs.length}</div>
+        </div>
+        <div className="stat p-3">
+          <div className="stat-title text-xs">Numbers heard</div>
+          <div className="stat-value text-2xl">{numbersHeard}</div>
+        </div>
+        <div className="stat p-3">
+          <div className="stat-title text-xs">Got right</div>
+          <div className="stat-value text-2xl">
+            {numbersHeard > 0 ? `${Math.round((correct / numbersHeard) * 100)}%` : "—"}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {runs.map((run) => (
+          <div key={run.id} className="card bg-base-100">
+            <div className="card-body p-4 gap-1">
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-body-sm truncate min-w-0">
+                  {run.number_min.toLocaleString("en-US")}–{run.number_max.toLocaleString("en-US")}
+                </span>
+                <span className="badge badge-sm badge-outline shrink-0 tabular-nums">
+                  {run.rounds} numbers
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-x-3 text-xs opacity-60">
+                <span>
+                  {run.skip_count} skipped · {run.wrong_attempts} wrong tries · {run.hints_used}{" "}
+                  hint{run.hints_used === 1 ? "" : "s"}
+                </span>
+                <span>{formatDuration(run.duration_seconds)}</span>
+                <span>
+                  {new Date(run.completed_at).toLocaleString(undefined, {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -186,6 +275,8 @@ interface BattleRow {
   gaveUp: boolean;
   playerCount: number;
   opponentsLabel: string;
+  /** Number listening rather than a flashcard set. */
+  isNumbers: boolean;
   setName: string;
   total: number;
   cleared: number;
@@ -202,7 +293,7 @@ async function BattleHistory({ userId }: { userId: string }) {
   const { data: mine, error } = await supabase
     .from("battle_room_members")
     .select(
-      "room_id, cleared, dont_know, first_try, finished_at, placement, forfeited_at, battle_rooms!inner(status, winner_id, set_name, card_count, started_at, finished_at)"
+      "room_id, cleared, dont_know, first_try, finished_at, placement, forfeited_at, battle_rooms!inner(status, winner_id, set_name, card_count, started_at, finished_at, mode, number_min, number_max)"
     )
     .eq("user_id", userId)
     .eq("battle_rooms.status", "finished");
@@ -252,7 +343,11 @@ async function BattleHistory({ userId }: { userId: string }) {
           opponentNames.length <= 2
             ? opponentNames.join(" & ") || "Player"
             : `${opponentNames[0]} + ${opponentNames.length - 1} others`,
-        setName: room.set_name ?? "Unknown set",
+        isNumbers: room.mode === "numbers",
+        setName:
+          room.mode === "numbers"
+            ? `Numbers ${room.number_min.toLocaleString("en-US")}–${room.number_max.toLocaleString("en-US")}`
+            : (room.set_name ?? "Unknown set"),
         total: room.card_count ?? 0,
         cleared: row.cleared,
         dontKnow: row.dont_know,
@@ -307,7 +402,9 @@ async function BattleHistory({ userId }: { userId: string }) {
               <div className="flex items-center justify-between gap-2">
                 <div className="flex flex-wrap gap-x-3 text-xs opacity-60">
                   <span>
-                    {battle.cleared}/{battle.total} cleared · {battle.dontKnow} don&apos;t know
+                    {battle.isNumbers
+                      ? `${battle.cleared}/${battle.total} correct · ${battle.dontKnow} skipped`
+                      : `${battle.cleared}/${battle.total} cleared · ${battle.dontKnow} don't know`}
                   </span>
                   <span>{formatDuration(battle.seconds)}</span>
                   <span>

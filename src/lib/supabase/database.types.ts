@@ -6,6 +6,8 @@ export type AnswerDisplayMode = "romaji" | "hiragana" | "both";
 export type SessionStatus = "active" | "paused" | "completed";
 export type FriendshipStatus = "pending" | "accepted" | "declined";
 export type BattleRoomStatus = "lobby" | "in_progress" | "finished";
+/** "cards" = the flashcard race; "numbers" = number listening. */
+export type BattleMode = "cards" | "numbers";
 export type BattleInviteStatus = "pending" | "accepted" | "declined";
 
 /** Points balance and medals, from my_reward_summary(). */
@@ -387,6 +389,12 @@ export interface Database {
           shuffle: boolean;
           card_limit: number | null;
           rematch_room_id: string | null;
+          mode: BattleMode;
+          number_min: number;
+          number_max: number;
+          rounds: number;
+          hints_allowed: number;
+          number_seed: number | null;
         };
         Insert: {
           id?: string;
@@ -406,6 +414,12 @@ export interface Database {
           shuffle?: boolean;
           card_limit?: number | null;
           rematch_room_id?: string | null;
+          mode?: BattleMode;
+          number_min?: number;
+          number_max?: number;
+          rounds?: number;
+          hints_allowed?: number;
+          number_seed?: number | null;
         };
         Update: {
           id?: string;
@@ -425,6 +439,12 @@ export interface Database {
           shuffle?: boolean;
           card_limit?: number | null;
           rematch_room_id?: string | null;
+          mode?: BattleMode;
+          number_min?: number;
+          number_max?: number;
+          rounds?: number;
+          hints_allowed?: number;
+          number_seed?: number | null;
         };
         Relationships: [];
       };
@@ -444,6 +464,9 @@ export interface Database {
           placement: number | null;
           forfeited_at: string | null;
           left_at: string | null;
+          hints_used: number;
+          wrong_attempts: number;
+          skipped_numbers: number[];
         };
         Insert: {
           room_id: string;
@@ -460,6 +483,9 @@ export interface Database {
           placement?: number | null;
           forfeited_at?: string | null;
           left_at?: string | null;
+          hints_used?: number;
+          wrong_attempts?: number;
+          skipped_numbers?: number[];
         };
         Update: {
           room_id?: string;
@@ -476,6 +502,9 @@ export interface Database {
           placement?: number | null;
           forfeited_at?: string | null;
           left_at?: string | null;
+          hints_used?: number;
+          wrong_attempts?: number;
+          skipped_numbers?: number[];
         };
         Relationships: [
           {
@@ -499,6 +528,38 @@ export interface Database {
         };
         Insert: never;
         Update: never;
+        Relationships: [];
+      };
+      number_practice_results: {
+        Row: {
+          id: string;
+          user_id: string;
+          number_min: number;
+          number_max: number;
+          rounds: number;
+          correct_count: number;
+          skip_count: number;
+          hints_used: number;
+          wrong_attempts: number;
+          skipped_numbers: number[];
+          duration_seconds: number | null;
+          completed_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          number_min: number;
+          number_max: number;
+          rounds: number;
+          correct_count: number;
+          skip_count?: number;
+          hints_used?: number;
+          wrong_attempts?: number;
+          skipped_numbers?: number[];
+          duration_seconds?: number | null;
+          completed_at?: string;
+        };
+        Update: Record<string, never>;
         Relationships: [];
       };
       battle_messages: {

@@ -11,6 +11,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
+import { cleanNumberOptions, type NumberOptions } from "@/lib/numbers/japanese";
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -28,10 +29,12 @@ const errorRedirect = (path: string, message: string) =>
  * Creates a room with the caller as host. Optional form fields: `set_id`
  * (preselects the set, e.g. from "Battle a friend" on a set) and `invite`
  * (a friend's user id to invite straight away, e.g. from their profile).
+ * `mode=numbers` opens a number listening room instead of a flashcard one.
  */
 export async function createBattleRoom(formData: FormData) {
   const setId = String(formData.get("set_id") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
+  const mode = formData.get("mode") === "numbers" ? "numbers" : "cards";
   // One or more friends to invite straight away (Rematch invites everyone).
   const inviteUserIds = Array.from(
     new Set(formData.getAll("invite").map((v) => String(v).trim()).filter(Boolean))
@@ -49,6 +52,7 @@ export async function createBattleRoom(formData: FormData) {
       set_id: setId || null,
       name: name || null,
       status: "lobby",
+      mode,
     })
     .select("id")
     .single();
@@ -147,6 +151,19 @@ export async function setBattleOptions(
   const { error } = await supabase
     .from("battle_rooms")
     .update({ shuffle: options.shuffle, card_limit: cardLimit })
+    .eq("id", roomId)
+    .eq("status", "lobby");
+  revalidatePath(`/battle/${roomId}`);
+  return error ? { error: error.message } : { ok: true as const };
+}
+
+/** Host sets a numbers room's range, rounds and hints. */
+export async function setNumberOptions(roomId: string, options: NumberOptions) {
+  const { min, max, rounds, hints } = cleanNumberOptions(options);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("battle_rooms")
+    .update({ number_min: min, number_max: max, rounds, hints_allowed: hints })
     .eq("id", roomId)
     .eq("status", "lobby");
   revalidatePath(`/battle/${roomId}`);

@@ -43,6 +43,13 @@ export default async function BattlePage({
         <p className="text-sm opacity-60">
           Race a friend through the same deck in flashcards mode — first to clear it wins.
         </p>
+        <p className="text-sm">
+          Or battle on Japanese numbers:{" "}
+          <Link href="/numbers?tab=multi" className="link">
+            number listening
+          </Link>
+          .
+        </p>
       </div>
 
       {error && <div className="alert alert-error text-sm py-2">{error}</div>}

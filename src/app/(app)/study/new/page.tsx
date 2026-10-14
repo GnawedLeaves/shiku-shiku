@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import StudySessionForm from "@/components/StudySessionForm";
 import SessionsList from "@/components/SessionsList";
@@ -43,6 +44,21 @@ export default async function NewStudySessionPage({
       <h1 className="text-xl font-bold">Study</h1>
 
       {params.error && <div className="alert alert-error text-sm py-2">{params.error}</div>}
+
+      <Link
+        href="/numbers"
+        className="flex items-center justify-between gap-3 border border-iron p-4 transition-colors hover:bg-iron/5"
+      >
+        <span className="flex flex-col">
+          <span className="text-subheading">Number listening</span>
+          <span className="text-sm opacity-60">
+            Hear Japanese numbers and type them in — solo or against friends.
+          </span>
+        </span>
+        <span aria-hidden="true" className="text-lg">
+          →
+        </span>
+      </Link>
 
       {sessionRows.length > 0 && (
         <div>
