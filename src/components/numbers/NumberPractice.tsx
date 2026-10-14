@@ -55,13 +55,22 @@ function useSeconds(since: number, running: boolean) {
 }
 
 /** Single-player number listening: settings, the run, then the results. */
-export default function NumberPractice() {
+export default function NumberPractice({
+  header,
+}: {
+  /** The page's title and tabs: shown before and after a run, not during. */
+  header?: React.ReactNode;
+}) {
   const [options, setOptions] = useState<NumberOptions>(DEFAULT_NUMBER_OPTIONS);
   const [run, setRun] = useState<Run | null>(null);
 
   if (!run) {
     return (
       <div className="flex flex-col gap-5">
+        {header}
+        <p className="border border-iron px-3 py-2 text-sm">
+          🔊 Turn your sound on — the numbers are read out loud.
+        </p>
         <NumberOptionsPicker value={options} onChange={setOptions} />
         <button
           type="button"
@@ -76,12 +85,15 @@ export default function NumberPractice() {
 
   if (run.finishedAt) {
     return (
-      <PracticeResults
-        options={options}
-        run={run}
-        onAgain={() => setRun(newRun())}
-        onSettings={() => setRun(null)}
-      />
+      <div className="flex flex-col gap-5">
+        {header}
+        <PracticeResults
+          options={options}
+          run={run}
+          onAgain={() => setRun(newRun())}
+          onSettings={() => setRun(null)}
+        />
+      </div>
     );
   }
 
@@ -126,7 +138,9 @@ function PracticeRun({
   }
 
   return (
-    <div className="flex min-h-[max(32rem,calc(100dvh-14rem))] flex-col gap-4">
+    // No fixed height: the round sits right under the progress bar, so both
+    // stay in view above the on-screen keyboard.
+    <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-subheading tabular-nums" aria-label="Time">
           {formatStudyTime(seconds)}

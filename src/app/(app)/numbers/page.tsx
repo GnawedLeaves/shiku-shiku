@@ -19,8 +19,8 @@ export default async function NumbersPage({
   const { tab: rawTab, error } = await searchParams;
   const tab: Tab = rawTab === "multi" ? "multi" : "solo";
 
-  return (
-    <div className="flex flex-col gap-5">
+  const header = (
+    <>
       <BackButton href="/study/new" label="Study" />
       <div>
         <h1 className="text-xl font-bold">Number listening</h1>
@@ -49,45 +49,53 @@ export default async function NumbersPage({
           </Link>
         ))}
       </nav>
+    </>
+  );
 
+  return (
+    <div className="flex flex-col gap-5">
       {tab === "solo" ? (
-        <NumberPractice />
+        // Hides the page header during a run, so the game starts at the top.
+        <NumberPractice header={header} />
       ) : (
-        <div className="flex flex-col gap-4">
-          <section className="flex flex-col gap-3 border border-iron p-4">
-            <h2 className="text-subheading">Create a room</h2>
-            <p className="text-sm opacity-60">
-              You&apos;ll pick the numbers, rounds and hints in the room, then invite friends or
-              share the code. First to get every number right wins.
-            </p>
-            <form action={createBattleRoom} className="flex flex-col gap-2">
-              <input type="hidden" name="mode" value="numbers" />
-              <input
-                name="name"
-                placeholder="Room name (optional)"
-                className="input input-bordered input-sm w-full"
-              />
-              <SubmitButton className="btn btn-primary btn-sm self-start" pendingText="Creating…">
-                Create room
-              </SubmitButton>
-            </form>
-          </section>
+        <>
+          {header}
+          <div className="flex flex-col gap-4">
+            <section className="flex flex-col gap-3 border border-iron p-4">
+              <h2 className="text-subheading">Create a room</h2>
+              <p className="text-sm opacity-60">
+                You&apos;ll pick the numbers, rounds and hints in the room, then invite friends or
+                share the code. First to get every number right wins.
+              </p>
+              <form action={createBattleRoom} className="flex flex-col gap-2">
+                <input type="hidden" name="mode" value="numbers" />
+                <input
+                  name="name"
+                  placeholder="Room name (optional)"
+                  className="input input-bordered input-sm w-full"
+                />
+                <SubmitButton className="btn btn-primary btn-sm self-start" pendingText="Creating…">
+                  Create room
+                </SubmitButton>
+              </form>
+            </section>
 
-          <section className="flex flex-col gap-3 border border-iron p-4">
-            <h2 className="text-subheading">Join with a code</h2>
-            <form action={joinBattleRoom} className="flex gap-2">
-              <input
-                name="code"
-                placeholder="ABC123"
-                className="input input-bordered input-sm flex-1 uppercase"
-                maxLength={8}
-              />
-              <SubmitButton className="btn btn-outline btn-sm" pendingText="Joining…">
-                Join
-              </SubmitButton>
-            </form>
-          </section>
-        </div>
+            <section className="flex flex-col gap-3 border border-iron p-4">
+              <h2 className="text-subheading">Join with a code</h2>
+              <form action={joinBattleRoom} className="flex gap-2">
+                <input
+                  name="code"
+                  placeholder="ABC123"
+                  className="input input-bordered input-sm flex-1 uppercase"
+                  maxLength={8}
+                />
+                <SubmitButton className="btn btn-outline btn-sm" pendingText="Joining…">
+                  Join
+                </SubmitButton>
+              </form>
+            </section>
+          </div>
+        </>
       )}
     </div>
   );

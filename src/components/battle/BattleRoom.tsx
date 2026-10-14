@@ -628,6 +628,9 @@ function Lobby({
             Everyone hears the same numbers. First to get {numberOptions.rounds} right wins;
             everyone plays on for their place. Skipping gives you a new number without scoring.
           </p>
+          <p className="border border-iron px-3 py-2 text-sm">
+            🔊 Turn your sound on — the numbers are read out loud.
+          </p>
         </section>
       ) : (
         <section className="flex flex-col gap-2">
@@ -1308,7 +1311,9 @@ function NumbersGame({
   }
 
   return (
-    <div className="flex min-h-[max(35rem,calc(100dvh-13rem))] flex-col gap-3">
+    // No fixed height: the round sits right under the race bars (however many
+    // there are), so it stays in view above the on-screen keyboard.
+    <div className="flex flex-col gap-3">
       {error && <div className="alert alert-error text-sm py-2">{error}</div>}
 
       <GameHeader roomId={room.id} elapsed={elapsed} out={done || forfeited} winner={winner} />
